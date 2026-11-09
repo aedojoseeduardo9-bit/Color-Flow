@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# Abre Color Flow (versión de desarrollador) en un Android virtual, recorre las pantallas con los atajos
+# `--es ir <atajo>` (ver GameView.debugGo) y guarda report.txt + capturas PNG.
+# La app se dibuja en un Canvas: no hay textos que tocar, por eso se usan atajos en vez de toques.
+set +e
+P=com.nioro.spectrumcolor
+APK="${APK:-ColorFlowDev.apk}"
+adb install -r "$APK" > install.txt 2>&1
+adb logcat -c
+(adb logcat -v time > live.log 2>&1 &)
+
+# go <atajo> [segundos]: reinicia la app directo en esa pantalla
+go()   { timeout 60 adb shell am start -S -W -n $P/.MainActivity --es ir "$1" >> start.txt 2>&1; sleep "${2:-5}"; }
+shot() { timeout 30 adb exec-out screencap -p > "$1.png"; echo "[$1] $2"; }
+alive() { adb shell pidof $P > /dev/null 2>&1 && echo "  app viva" || echo "  LA APP SE CERRÓ"; }
+
+{
+  echo "== PASOS"
+  go intro:6 4;         shot 00i_intro_06 "intro nioro a los 0,6 s"; alive
+  go intro:14 4;        shot 00i_intro_14 "intro: el arco de luz pasando"; alive
+  go intro:21 4;        shot 00i_intro_21 "intro: destello final"; alive
+  go intro:30 4;        shot 00i_intro_30 "intro: logo completo"; alive
+  go terminos 6;        shot 00_terminos "términos y condiciones (primera vez)"; alive
+  go terminos:1 5; timeout 10 adb shell input swipe 540 1500 540 500 400; sleep 3; shot 00c_terminos_final "términos: al final y con la casilla marcada"; alive
+  go inicio 8;          shot 01_inicio "menú principal"; alive
+  go icono:0;           shot 00_icono_a "ícono: esfera Aurora boreal"; alive
+  go icono:1;           shot 00_icono_b "ícono: con disco de vidrio"; alive
+  go ajustes;           shot 02_ajustes "ajustes"; alive
+  go borrar1;           shot 03_borrar_aviso "ventana roja: lista de lo que se borra"; alive
+  go borrar2;           shot 04_borrar_seguro "¿Estás seguro?"; alive
+  go apariencias;       shot 05_apariencias "apariencias"; alive
+  go esfera:81;         shot 05b_esfera_saturno "esfera nueva: Anillos de Saturno"; alive
+  go esfera:91;         shot 05c_esfera_engranajes "esfera nueva: Engranajes"; alive
+  go esfera:98;         shot 05d_esfera_caleidoscopio "esfera nueva: Caleidoscopio"; alive
+  go estela:27;         shot 05e_estela_aurora "estela nueva: Aurora boreal"; alive
+  go estela:40;         shot 05f_estela_supernova "estela nueva: Supernova"; alive
+  go nivel:1;           shot 06_nivel1 "nivel 1"; alive
+  go nivel:14 7;        shot 06b_nivel14 "nivel 14 (obstáculos de catálogo)"; alive
+  go nivel:75 7;        shot 06c_nivel75 "nivel 75"; alive
+  go nivel:118 7;       shot 06d_nivel118 "nivel 118"; alive
+  go editor:60 6;       shot 06e_editor "editor de niveles"; alive
+  go galeria:60 6;      shot 06f_galeria "galería del catálogo"; alive
+  go infinito;          shot 07_infinito "modo infinito"; alive
+  go mundos 6;          shot 08_mundos "carrusel de mundos de la Aventura"; alive
+  go aventura:0 9;      shot 10_aventura_m1 "Aventura mundo 1, sala inicial"; alive
+  go vitrina:4:0 9;     shot 11_vitrina_a "arquero, slime, bombardero"; sleep 2; shot 11b_vitrina_a "1 s después"; alive
+  go vitrina:8:1 9;     shot 12_vitrina_b "mago, lobo, calavera"; sleep 2; shot 12b_vitrina_b "1 s después"; alive
+  go vitrina:11:2 9;    shot 13_vitrina_c "gólem élite, caballero, arquero élite"; sleep 2; shot 13b_vitrina_c "1 s después"; alive
+  go aventura:11 9;     shot 14_aventura_m12 "Aventura mundo 12, sala inicial"; alive
+  go taller 9;          shot 15_taller "Taller: editor de salas de la Aventura"; alive
+  # capturas para la ficha de Google Play, con la esfera Aurora boreal (la del ícono)
+  go esfera:56;         shot 20_play_apariencias "Play: apariencias con Aurora boreal"; alive
+  go inicio 8;          shot 21_play_inicio "Play: menú"; alive
+  go nivel:5 7;         shot 22_play_nivel5 "Play: nivel 5"; alive
+  go nivel:33 7;        shot 23_play_nivel33 "Play: nivel 33"; alive
+  go nivel:75 7;        shot 24_play_nivel75 "Play: nivel 75"; alive
+  go nivel:112 7;       shot 25_play_nivel112 "Play: nivel 112"; alive
+  go infinito;          shot 26_play_infinito "Play: modo infinito"; alive
+  # pantallas que antes no se veían
+  go niveles;           shot 30_niveles "lista de niveles"; alive
+  go temas;             shot 31_temas "temas"; alive
+  go multi;             shot 32_multi "multijugador local"; alive
+  go pausa:20;          shot 33_pausa "pausa en el nivel 20"; alive
+  go ganar:20 6;        shot 34_ganar "nivel superado"; alive
+  go nivel:2 5; adb shell input tap 540 1700; sleep 7; shot 35_perder "perder (un toque y la bola cae)"; alive
+} > steps.txt 2>&1
+
+# Idiomas: las mismas pantallas en ruso (el más largo) y en español, para ver textos que se salen o sin traducir.
+# Los textos sin traducción quedan en el registro con la marca "I18N" (versión dev) y salen en report.txt.
+tour() {
+  local L="$1"
+  go terminos 6;        shot ${L}_00_terminos "$L términos y condiciones"
+  go inicio 6;          shot ${L}_01_inicio "$L menú"
+  go ajustes;           shot ${L}_02_ajustes "$L ajustes"
+  go borrar1;           shot ${L}_03_borrar "$L borrar progreso"
+  go borrar2;           shot ${L}_04_seguro "$L ¿seguro?"
+  go apariencias;       shot ${L}_05_apariencias "$L apariencias"
+  go estela:27;         shot ${L}_06_estelas "$L estelas"
+  go temas;             shot ${L}_07_temas "$L temas"
+  go niveles;           shot ${L}_08_niveles "$L niveles"
+  go nivel:14 6;        shot ${L}_09_nivel "$L nivel 14"
+  go pausa:20;          shot ${L}_10_pausa "$L pausa"
+  go ganar:20 6;        shot ${L}_11_ganar "$L nivel superado"
+  go nivel:2 5; adb shell input tap 540 1700; sleep 7; shot ${L}_12_perder "$L perder"
+  go infinito;          shot ${L}_13_infinito "$L infinito"
+  go multi;             shot ${L}_14_multi "$L multijugador"
+  go mundos 6;          shot ${L}_15_mundos "$L mundos de la Aventura"
+  go aventura:0 9;      shot ${L}_16_aventura "$L Aventura"
+  go taller 9;          shot ${L}_17_taller "$L Taller"
+  go editor:60 6;       shot ${L}_18_editor "$L editor"
+  go galeria:60 6;      shot ${L}_19_galeria "$L galería"
+  alive
+}
+{
+  echo "== IDIOMAS"
+  go idioma:2 4; tour ru
+  go idioma:0 4; tour es
+} > idiomas.txt 2>&1
+
+# Capturas para la ficha de Google Play: modo tienda (sin botones de desarrollador), esfera Aurora boreal y la bola
+# en movimiento (unos toques justo antes de la foto). Primero en español (p_es_*), después en inglés (p_en_*).
+# tools/ficha_capturas.py les pone el título y las deja en docs/play/.
+toques() { for i in 1 2 3; do timeout 5 adb shell input tap 540 1700 > /dev/null 2>&1; sleep 0.25; done; }
+fotos() {
+  local L="$1"
+  go tienda:1,esfera:56 5;   shot p_${L}_07_apariencias "Play $L: apariencias"
+  go tienda:1,inicio 6;      shot p_${L}_01_menu "Play $L: menú"
+  go tienda:1,nivel:5 6;     toques; shot p_${L}_02_nivel5 "Play $L: nivel 5 jugando"
+  go tienda:1,nivel:33 6;    toques; shot p_${L}_03_nivel33 "Play $L: nivel 33 jugando"
+  go tienda:1,nivel:75 6;    toques; shot p_${L}_04_nivel75 "Play $L: nivel 75 jugando"
+  go tienda:1,nivel:112 6;   toques; shot p_${L}_05_nivel112 "Play $L: nivel 112 jugando"
+  go tienda:1,infinito 6;    toques; shot p_${L}_06_infinito "Play $L: infinito jugando"
+  go tienda:1,ganar:30 6;    shot p_${L}_08_ganar "Play $L: nivel superado"
+  go tienda:1,mundos 6;      shot p_${L}_09_mundos "Play $L: mundos de la Aventura"
+  go aventura:5 9;           shot p_${L}_10_aventura "Play $L: Aventura"
+  go vitrina:8:1 9;          shot p_${L}_11_enemigos "Play $L: enemigos"
+  go taller 9;               shot p_${L}_12_taller "Play $L: Taller"
+  alive
+}
+{
+  echo "== CAPTURAS PARA GOOGLE PLAY"
+  fotos es
+  go idioma:1 4; fotos en   # termina en inglés, como estaba
+} >> idiomas.txt 2>&1
+
+# Filmación del anuncio (solo si existe ci/filmar.txt): cada escena se dibuja cuadro a cuadro en la app (modo
+# filmación de GameView) y se baja a film/<nombre>/; al final se empaqueta en film.zip (lo sube publicar_diagnostico.sh).
+if [ -f ci/filmar.txt ]; then
+  {
+    echo "== FILMACIÓN"
+    mkdir -p film
+    grep -v '^#' ci/filmar.txt | while read -r atajos nombre; do
+      [ -z "$nombre" ] && continue
+      adb logcat -c < /dev/null
+      timeout 60 adb shell am start -S -W -n $P/.MainActivity --es ir "$atajos" < /dev/null >> start.txt 2>&1
+      ok=0
+      for i in $(seq 1 240); do
+        if timeout 10 adb logcat -d -s ColorFlow:I < /dev/null 2>/dev/null | grep -q "FILM_DONE $nombre "; then ok=1; break; fi
+        sleep 3
+      done
+      timeout 120 adb pull "/sdcard/Android/data/$P/files/film/$nombre" "film/" < /dev/null > /dev/null 2>&1
+      echo "[$nombre] terminada=$ok cuadros=$(ls film/$nombre 2>/dev/null | wc -l)"
+      timeout 10 adb logcat -d < /dev/null 2>/dev/null | grep -E "FATAL|ColorFlow.*film" | head -5
+    done
+    (cd film && zip -qr ../film.zip .)
+    ls -la film.zip
+    go idioma:1 4
+  } > filmacion.txt 2>&1
+fi
+
+# Fluidez: cuadros dibujados y cuántos fueron lentos en 8 s de cada pantalla (con toques en las que se juegan).
+# El Android virtual dibuja sin tarjeta gráfica: los números sirven para comparar antes/después, no son los de un teléfono.
+perf() {
+  local name="$1" taps="$2"
+  timeout 20 adb shell dumpsys gfxinfo $P reset > /dev/null 2>&1
+  for i in 1 2 3 4 5 6 7 8; do
+    [ "$taps" = "1" ] && timeout 5 adb shell input tap 540 1700 > /dev/null 2>&1
+    sleep 1
+  done
+  echo "[$name] $(timeout 20 adb shell dumpsys gfxinfo $P | grep -E 'Total frames rendered|Janky frames:|50th percentile|90th percentile|99th percentile' | head -5 | sed 's/^ *//' | tr '\n' ';')"
+}
+{
+  echo "== FLUIDEZ (8 s por pantalla)"
+  go inicio 6;        perf menu 0
+  go apariencias 5;   perf apariencias 0
+  go nivel:14 6;      perf nivel14_jugando 1
+  go nivel:118 6;     perf nivel118_jugando 1
+  go infinito 5;      perf infinito_jugando 1
+  go mundos 5;        perf mundos 0
+  go aventura:0 8;    perf aventura_m1 0
+  go vitrina:11:2 8;  perf aventura_enemigos 0
+  # comparación justa en la misma máquina: dibujo nuevo (degradados reutilizados) contra el antiguo, alternados
+  echo "== NUEVO vs ANTIGUO (misma prueba, alternados)"
+  for k in 1 2; do
+    go inicio 6;                perf "menu_nuevo$k" 0
+    go legado:1,inicio 6;       perf "menu_antiguo$k" 0
+    go apariencias 5;           perf "apariencias_nuevo$k" 0
+    go legado:1,apariencias 5;  perf "apariencias_antiguo$k" 0
+    go nivel:14 6;              perf "nivel14_nuevo$k" 1
+    go legado:1,nivel:14 6;     perf "nivel14_antiguo$k" 1
+  done
+  echo "== MEMORIA"
+  timeout 20 adb shell dumpsys meminfo $P | grep -E "TOTAL PSS|TOTAL:|Java Heap|Native Heap|Graphics" | head -6
+} > perf.txt 2>&1
+
+timeout 60 adb logcat -d > full.log 2>&1
+{
+  echo "== instalacion"; cat install.txt
+  echo "== arranque"; tail -n 20 start.txt
+  echo "== proceso vivo?"; adb shell pidof $P || echo "NO ESTA VIVO"
+  echo "== errores graves"
+  grep -E "FATAL EXCEPTION|ANR in" full.log | head -20
+  grep -E -A14 "FATAL EXCEPTION" full.log | head -80
+  grep -E "ColorFlow" full.log | head -30
+  echo; cat steps.txt
+  echo; cat perf.txt
+  echo; cat idiomas.txt
+  [ -f filmacion.txt ] && { echo; cat filmacion.txt; }
+  echo "== BARRAS DEL SISTEMA (veces que reaparecieron y se escondieron de nuevo)"
+  grep -ac "barras visibles" live.log
+  echo "== TEXTOS SIN TRADUCIR ([1] inglés, [2] ruso)"
+  grep -a "I18N" live.log | sed 's/.*FALTA/FALTA/' | sort -u | head -300
+  echo "== lineas clave del log"; grep -E "spectrumcolor|AndroidRuntime|ANR|OutOfMemory|has died|Fatal|SIGSEGV|Davey" live.log | cut -c1-240 | tail -n 60
+} > report.txt 2>&1
