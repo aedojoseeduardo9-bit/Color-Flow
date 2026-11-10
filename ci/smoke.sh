@@ -62,7 +62,7 @@ alive() { adb shell pidof $P > /dev/null 2>&1 && echo "  app viva" || echo "  LA
   go multi;             shot 32_multi "multijugador local"; alive
   go pausa:20;          shot 33_pausa "pausa en el nivel 20"; alive
   go ganar:20 6;        shot 34_ganar "nivel superado"; alive
-  go nivel:2 5; adb shell input tap 540 1700; sleep 7; shot 35_perder "perder (un toque y la bola cae)"; alive
+  go nivel:2 5; adb shell input tap 540 1700; sleep 1.3; shot 35a_muerte "momento de morir: onda y gajos de la bola"; sleep 6; shot 35_perder "perder (un toque y la bola cae)"; alive
 } > steps.txt 2>&1
 
 # Idiomas: las mismas pantallas en ruso (el más largo) y en español, para ver textos que se salen o sin traducir.

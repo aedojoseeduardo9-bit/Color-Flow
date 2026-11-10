@@ -2005,7 +2005,10 @@ class Adv(val world: Int, val viewW: Float, val god: Boolean = false) {
         }
         if (jumping && !inp.jumpHeld && pvy < -190f) { pvy = -190f; jumping = false }
         if (pvy >= 0f) jumping = false
-        pvy = min(900f, pvy + AdvCfg.GRAV * dt)
+        // "flotación" en lo alto del salto: cerca del ápice y con el botón apretado la gravedad baja un poco,
+        // así el salto se siente más controlable (solo lo hace un pelo más alto, nunca más corto)
+        val g = if (!onGround && inp.jumpHeld && abs(pvy) < 110f) AdvCfg.GRAV * 0.62f else AdvCfg.GRAV
+        pvy = min(900f, pvy + g * dt)
         val oldPx = px
         px = (px + pvx * dt).coerceIn(lockedMin(), lockedMax())
         if (blocks.isNotEmpty()) collideX(oldPx)
