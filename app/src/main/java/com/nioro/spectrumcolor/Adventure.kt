@@ -2005,10 +2005,9 @@ class Adv(val world: Int, val viewW: Float, val god: Boolean = false) {
         }
         if (jumping && !inp.jumpHeld && pvy < -190f) { pvy = -190f; jumping = false }
         if (pvy >= 0f) jumping = false
-        // "flotación" en lo alto del salto: cerca del ápice y con el botón apretado la gravedad baja un poco,
-        // así el salto se siente más controlable (solo lo hace un pelo más alto, nunca más corto)
-        val g = if (!onGround && inp.jumpHeld && abs(pvy) < 80f) AdvCfg.GRAV * 0.7f else AdvCfg.GRAV
-        pvy = min(900f, pvy + g * dt)
+        // (Se probó una "flotación" en el ápice del salto: cambiaba los arcos y el bot dejaba de pasar algunas
+        //  plataformas flotantes y el mundo 10. La física del salto se queda exactamente como está verificada.)
+        pvy = min(900f, pvy + AdvCfg.GRAV * dt)
         val oldPx = px
         px = (px + pvx * dt).coerceIn(lockedMin(), lockedMax())
         if (blocks.isNotEmpty()) collideX(oldPx)
