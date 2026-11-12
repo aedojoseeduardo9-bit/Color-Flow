@@ -674,6 +674,7 @@ object I18n {
         d("Vuelve cada día: el premio crece", "Come back every day: the prize grows", "Заходи каждый день: награда растёт")
         p("Día (\\d+)", "Day $1", "День $1")
         d("Racha: %d días seguidos", "Streak: %d days in a row", "Серия: %d дн. подряд")
+        d("Racha: %d día seguido", "Streak: %d day in a row", "Серия: %d день подряд")
         d("Recoger", "Collect", "Забрать")
         d("¡Genial!", "Great!", "Отлично!")
         d("Cerrar", "Close", "Закрыть")

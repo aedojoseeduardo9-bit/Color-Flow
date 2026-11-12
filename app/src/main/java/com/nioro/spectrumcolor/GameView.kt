@@ -6212,9 +6212,11 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         Gl.rect.set(x - s * 0.5f, y - s * 0.05f, x - s * 0.32f, y + s * 0.55f)
         c.drawRoundRect(Gl.rect, s * 0.06f, s * 0.06f, pp)
         // tapa
-        c.save()
-        c.translate(0f, -open * s * 0.85f)
-        c.rotate(-open * 8f, x, y - s * 0.22f)
+        // tapa: al abrir sube un poco y se desvanece (no tapa las monedas ni se sale del marco)
+        if (open > 0f) c.saveLayerAlpha(x - s * 1.3f, y - s * 1.6f, x + s * 1.3f, y + s * 0.1f, (255 * (1f - 0.85f * open)).toInt())
+        else c.save()
+        c.translate(0f, -open * s * 0.5f)
+        c.rotate(-open * 6f, x, y - s * 0.22f)
         pp = Gl.p()
         pp.color = Gl.darken(body, 0.85f)
         Gl.rect.set(x - s * 0.72f, y - s * 0.36f, x + s * 0.72f, y - s * 0.08f)
@@ -6299,7 +6301,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         Gl.rect.set(l + 14f, t + 14f, r - 14f, b - 14f)
         c.drawRoundRect(Gl.rect, 52f, 52f, pp)
 
-        Gl.text(c, "REGALO DIARIO", 540f, t + 116f, 60f, Gl.medium, Gl.white(250), 0.1f, null, gold)
+        Gl.textFit(c, "REGALO DIARIO", 540f, t + 116f, 60f, 800f, Gl.medium, Gl.white(250), 0.1f)
         Gl.textFit(c, "Vuelve cada día: el premio crece", 540f, t + 176f, 34f, 780f, Gl.regular, Gl.white(200))
 
         // escenario de la caja: todo queda dentro del marco
@@ -6376,7 +6378,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             }
         }
         val streak = if (prefs.giftDay >= today() - 1) prefs.giftStreak else 0
-        Gl.textFit(c, String.format(I18n.t("Racha: %d días seguidos"), streak), 540f, dy + 150f, 34f, 780f, Gl.regular, Gl.white(200), translate = false)
+        val rachaTxt = if (streak == 1) "Racha: %d día seguido" else "Racha: %d días seguidos"
+        Gl.textFit(c, String.format(I18n.t(rachaTxt), streak), 540f, dy + 150f, 34f, 780f, Gl.regular, Gl.white(200), translate = false)
         if (!opened && giftReady()) {
             button(c, "gift_take", "Recoger", 540f, b - 140f, 640f, 126f, 0xFFFFB020.toInt(), 54f)
         } else {
