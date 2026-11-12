@@ -72,6 +72,12 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     @Volatile private var updState = 0
     @Volatile private var updNew = 0
 
+    private val appVersion: String = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2"
+    } catch (e: Exception) {
+        "2"
+    }
+
     private fun installedBuild(): Int = try {
         val vn = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
         vn.substringAfterLast('.').toIntOrNull() ?: 0
@@ -2646,7 +2652,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             button(c, "topen", if (prefs.allOpen) "Todos abiertos" else "Abrir todos", bx, ry + rh / 2f, bw, bh, 0, 40f)
         }
 
-        Gl.text(c, "Color Flow  ·  v2", 540f, vh - 60f, 34f, Gl.regular, Gl.white(120))
+        // número de la versión instalada: sirve para saber si el botón "Actualización" encontró una más nueva
+        Gl.text(c, "Color Flow  ·  v$appVersion", 540f, vh - 60f, 34f, Gl.regular, Gl.white(120), 0f, null, 0, Paint.Align.CENTER, false)
         if (resetDlg != 0) drawResetDlg(c)
     }
 

@@ -107,11 +107,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # mismo número que el de la versión instalada (app/build.gradle.kts suma 5000 al contador)
+          BUILD=$(( ${{ github.run_number }} + 5000 ))
           gh release delete latest --cleanup-tag -y || true
           gh release create latest dist/ColorFlow.apk dist/qr.png dist/ColorFlowDev.apk dist/qr_dev.png dist/SpectrumColor.apk dist/SpectrumColorDev.apk \
             --target "$(git rev-parse HEAD)" \
             --title "Color Flow (última versión)" \
-            --notes "Escanea el QR o abre ColorFlow.apk desde el celular para instalar. Compilación #${{ github.run_number }}."
+            --notes "Escanea el QR o abre ColorFlow.apk desde el celular para instalar. Compilación #$BUILD."
 
       - name: Resumen
         if: github.ref == 'refs/heads/main' || github.event_name == 'issues'

@@ -71,9 +71,9 @@ jobs:
           rm -f "$UPLOAD_KEYSTORE"
           mkdir -p dist
           cp app/build/outputs/bundle/playRelease/app-play-release.aab dist/ColorFlow.aab
-          printf 'Nueva versión de Color Flow (compilación #%s).\n' "${{ github.run_number }}" > dist/whatsnew-es-419
+          printf 'Nueva versión de Color Flow (compilación #%s).\n' "$(( ${{ github.run_number }} + 5000 ))" > dist/whatsnew-es-419
           cp dist/whatsnew-es-419 dist/whatsnew-es-ES
-          printf 'New Color Flow version (build #%s).\n' "${{ github.run_number }}" > dist/whatsnew-en-US
+          printf 'New Color Flow version (build #%s).\n' "$(( ${{ github.run_number }} + 5000 ))" > dist/whatsnew-en-US
 
       - name: Guardar el paquete en el release "play" (para subirlo a mano si hace falta)
         env:
