@@ -5996,7 +5996,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             Gl.rect.set(l, t, r, b)
             c.drawRoundRect(Gl.rect, 46f, 46f, pp)
             Gl.text(c, tierLabel(t2), cx, t + 44f, 22f, Gl.medium, tc2, 0.25f)
-            val bc = pal[(j + (time * 0.8f).toInt()) % 4]
+            val bc = pal[j % 4] // color fijo por casilla: cada imagen se reutiliza (no se crea otra al cambiar el color)
             if (shopTab == 0) {
                 drawBallAt(c, cx, cy - 22f, 66f, bc, Skins.PREMIUM_FIRST + j, time, false)
             } else {

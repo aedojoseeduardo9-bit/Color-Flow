@@ -18,12 +18,13 @@ object PremiumDraw {
     /** Píxeles reales por unidad de diseño del lienzo actual (lo fija quien dibuja: GameView o la Aventura). */
     @JvmField var pxPerUnit = 1f
 
-    private class Img(val n: Int) {
+    private class Img(val n: Int, val phase: Float) {
         val bmp: Bitmap = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
         val px = IntArray(n * n)
-        var last = -100f
+        var slot = Long.MIN_VALUE
         var used = 0f
     }
+    private var seq = 0
 
     private val cache = HashMap<Long, Img>()
     private val workers = max(0, min(3, Runtime.getRuntime().availableProcessors() - 1))
@@ -47,13 +48,16 @@ object PremiumDraw {
         var img = cache[key]
         if (img == null) {
             if (cache.size >= 64) sweep(tm, true)
-            img = Img(n)
+            // cada imagen se repinta en su propio turno: así no se juntan todas en el mismo cuadro
+            seq = (seq + 7) % 16
+            img = Img(n, seq / 16f)
             cache[key] = img
         }
-        if (tm - img.last >= 1f / fps || tm < img.last) {
+        val sl = kotlin.math.floor(tm * fps + img.phase).toLong()
+        if (sl != img.slot) {
             render(k, img.px, n, col, tm)
             img.bmp.setPixels(img.px, 0, n, 0, 0, n, n)
-            img.last = tm
+            img.slot = sl
         }
         img.used = tm
         val h = Premium.M * r

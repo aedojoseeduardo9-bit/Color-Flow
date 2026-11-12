@@ -692,7 +692,7 @@ object I18n {
         d("Reactor", "Reactor", "Реактор")
         d("Geoda", "Geode", "Жеода")
         d("Atardecer neón", "Neon sunset", "Неоновый закат")
-        d("Vórtice carmesí", "Crimson vortex", "Багровый вихрь")
+        d("Vórtice hipnótico", "Hypnotic vortex", "Гипнотический вихрь")
         d("Nebulosa viva", "Living nebula", "Живая туманность")
         d("Cometa helado", "Frozen comet", "Ледяная комета")
         d("Ojo del dragón", "Dragon eye", "Глаз дракона")

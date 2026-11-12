@@ -63,6 +63,13 @@ fun main(args: Array<String>) {
     }
     ImageIO.write(grid, "png", File(dir, "grid.png"))
 
+    // las mismas en cada color de juego (la bola debe leerse siempre de su color)
+    if (args.getOrNull(4) == "colores") for (ci in 0 until 4) {
+        val g2 = blank(per * n, rows * n)
+        for ((idx, k) in sel.withIndex()) put(g2, (idx % per) * n, (idx / per) * n, k, cols[ci], 1.7f + k * 0.13f)
+        ImageIO.write(g2, "png", File(dir, "color_$ci.png"))
+    }
+
     // tiras en el tiempo (con los 4 colores de juego)
     if (sel.size <= 8) for (k in sel) {
         val img = blank(times.size * n, 4 * n)

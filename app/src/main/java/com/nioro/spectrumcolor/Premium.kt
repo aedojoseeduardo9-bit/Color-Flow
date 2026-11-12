@@ -29,7 +29,7 @@ object Premium {
         "Pulso vital", "Aurora cuántica",
         // épicas
         "Corazón de lava", "Tormenta eléctrica", "Fuego espectral", "Galaxia espiral", "Reactor", "Geoda",
-        "Atardecer neón", "Vórtice carmesí", "Nebulosa viva", "Cometa helado",
+        "Atardecer neón", "Vórtice hipnótico", "Nebulosa viva", "Cometa helado",
         // legendarias
         "Ojo del dragón", "Portal dimensional", "Corona solar", "Bobina de Tesla", "Orbitales", "Fractal",
         "Sakura", "Fuegos artificiales", "Prisma de luz", "Hipernova",
@@ -298,12 +298,12 @@ object Premium {
             when (k) {
                 1 -> { specK = 1.6f; rimR = 1f; rimG = 1f; rimB = 1f; rimK = 0.3f; haloK = 0.35f }
                 3 -> { specK = 1.3f; rimK = 0.35f; haloK = 0.3f; amb = 0.55f }
-                4 -> { alphaIn = 0.86f; rimK = 1.1f; rimR = 0.5f * br + 0.3f; rimG = 0.5f * bg + 0.5f; rimB = 1f }
+                4 -> { alphaIn = 0.86f; rimK = 1.1f }
                 5 -> { specK = 1.5f; amb = 0.45f }
                 7, 8, 11, 16 -> rimK = 0.7f
                 13 -> { specK = 0.6f; amb = 0.5f; haloK = 0.4f }
                 17 -> { specK = 1.4f; rimR = 0.85f; rimG = 0.95f; rimB = 1f }
-                20 -> { specK = 0.2f; rimR = 1f; rimG = 0.75f * lg + 0.2f; rimB = 0.3f * lb; rimK = 0.2f; haloK = 0.9f }
+                20 -> { specK = 0.2f; rimK = 0.2f; haloK = 0.9f }
                 26 -> { alphaIn = 0.93f; specK = 1.4f; rimR = 1f; rimG = 1f; rimB = 1f; rimK = 0.8f }
                 28 -> { specK = 0.5f; rimK = 0.3f; haloK = 0.25f }
                 32 -> { specK = 0.15f; rimK = 0.05f; haloK = 0.1f; rimR = 1f; rimG = 1f; rimB = 1f }
@@ -377,22 +377,22 @@ object Premium {
                 2 -> { // océano abisal
                     val depth = sat((y + 1f) * 0.5f)
                     val dk = 1f - depth * 0.75f
-                    ar = (br * 0.25f + 0.02f) * dk; ag = (bg * 0.25f + 0.1f) * dk; ab = (bb * 0.25f + 0.22f) * dk
+                    ar = (br * 0.4f + 0.02f) * dk; ag = (bg * 0.4f + 0.06f) * dk; ab = (bb * 0.4f + 0.12f) * dk
                     val n1 = noise(x * 3.2f + t * 0.45f, y * 3.2f + t * 0.3f)
                     val n2 = noise(x * 3.2f - t * 0.35f + 5f, y * 3.2f + t * 0.2f)
                     var cau = sat(1f - abs(n1 - n2) * 7f); cau *= cau; cau *= cau * (1.3f - depth)
                     var ray = sat(0.5f + 0.5f * s(x * 6f + y * 1.5f + t * 0.6f)); ray *= ray; ray *= ray * sat(0.4f - y) * 0.4f
                     val dots = stars(x + s(t * 0.3f) * 0.1f, y - t * 0.12f, 9f, 0.88f) * (0.4f + depth)
                     val bub = bubbles(x, y, t, 5f)
-                    er = (br * 0.5f + 0.25f) * cau * 1.4f + ray * lr + dots * 0.2f + bub
-                    eg = (bg * 0.5f + 0.55f) * cau * 1.4f + ray * lg + dots * 1.0f + bub
-                    eb = (bb * 0.5f + 0.6f) * cau * 1.4f + ray * lb + dots * 1.0f + bub
+                    er = (br * 0.75f + 0.2f) * cau * 1.4f + ray * lr + dots * (br * 0.5f + 0.4f) + bub
+                    eg = (bg * 0.75f + 0.3f) * cau * 1.4f + ray * lg + dots * (bg * 0.5f + 0.5f) + bub
+                    eb = (bb * 0.75f + 0.35f) * cau * 1.4f + ray * lb + dots * (bb * 0.5f + 0.5f) + bub
                 }
                 3 -> { // tinta viva en leche
                     val q1 = fbm(x * 2f + t * 0.15f, y * 2f - t * 0.1f, 3)
                     val w = fbm(x * 2f + q1 * 3f, y * 2f + q1 * 3f + t * 0.2f, 3)
-                    val ink = sat((w - 0.47f) * 7f)
-                    val edge = sat(1f - abs(w - 0.47f) * 28f)
+                    val ink = sat((w - 0.43f) * 7f)
+                    val edge = sat(1f - abs(w - 0.43f) * 28f)
                     val mr = 0.93f; val mg = 0.93f; val mb = 0.96f
                     ar = mr + (br * 0.85f - mr) * ink - edge * 0.25f
                     ag = mg + (bg * 0.85f - mg) * ink - edge * 0.25f
@@ -408,9 +408,9 @@ object Premium {
                     val grid = sat(1f - min(min(gu, 1f - gu), min(gv, 1f - gv)) * 14f)
                     val scan = 0.55f + 0.45f * s(y * 120f + t * 12f)
                     val sweep = sat(1f - abs(y - (fr(t * 0.45f) * 2.6f - 1.3f)) * 6f)
-                    val f = grid * 0.9f * scan + 0.12f * scan + sweep * 0.7f
-                    ar = 0.02f; ag = 0.05f; ab = 0.08f
-                    er = (br * 0.5f + 0.1f) * f; eg = (bg * 0.5f + 0.5f) * f; eb = (bb * 0.4f + 0.6f) * f
+                    val f = grid * 1.1f * scan + 0.3f * scan + sweep * 0.8f
+                    ar = br * 0.15f + 0.02f; ag = bg * 0.15f + 0.03f; ab = bb * 0.15f + 0.05f
+                    er = (br * 0.85f + 0.12f) * f; eg = (bg * 0.85f + 0.2f) * f; eb = (bb * 0.85f + 0.25f) * f
                     ain = 0.6f + 0.4f * sat(f + (1f - z))
                 }
                 5 -> { // cristal prismático (talla brillante)
@@ -446,13 +446,13 @@ object Premium {
                     val grid = sat(1f - min(min(gx, 1f - gx), min(gy, 1f - gy)) * 30f) * 0.12f
                     val beat = sat(1f - fr(t * 0.75f) * 5f)
                     val f = (line + glow) * (0.35f + 0.65f * head)
-                    ar = 0.03f; ag = 0.04f; ab = 0.05f
+                    ar = br * 0.22f + 0.02f; ag = bg * 0.22f + 0.02f; ab = bb * 0.22f + 0.03f
                     er = br * (f * 1.6f + grid + beat * 0.35f) + line * head * 0.6f
                     eg = bg * (f * 1.6f + grid + beat * 0.35f) + line * head * 0.6f
                     eb = bb * (f * 1.6f + grid + beat * 0.35f) + line * head * 0.6f
                 }
                 7 -> { // aurora cuántica
-                    ar = 0.02f; ag = 0.03f; ab = 0.07f
+                    ar = br * 0.12f + 0.02f; ag = bg * 0.12f + 0.02f; ab = bb * 0.12f + 0.05f
                     var acc = 0f; var top = 0f
                     for (j in 0 until 2) {
                         val yc = -0.12f + 0.2f * s(x * 2.2f + t * 0.6f + j * 2f) + 0.3f * (fbm(x * 1.4f + t * 0.22f + j * 7f, j * 3f, 2) - 0.5f) + j * 0.22f
@@ -464,9 +464,9 @@ object Premium {
                         top += v * sat(-dist * 2.5f)
                     }
                     val st = stars(x, y, 11f, 0.9f) * 0.8f
-                    er = acc * (br * 0.4f + 0.1f) + top * 0.7f + st
-                    eg = acc * (bg * 0.4f + 0.7f) + top * 0.2f + st
-                    eb = acc * (bb * 0.4f + 0.35f) + top * 0.9f + st
+                    er = acc * (br * 0.85f + 0.12f) + top * (br * 0.5f + 0.4f) + st
+                    eg = acc * (bg * 0.85f + 0.22f) + top * (bg * 0.5f + 0.25f) + st
+                    eb = acc * (bb * 0.85f + 0.15f) + top * (bb * 0.5f + 0.45f) + st
                 }
                 8 -> { // corazón de lava
                     val u = lon * 1.1f + t * 0.22f
@@ -477,7 +477,7 @@ object Premium {
                     val heat = seam * (0.75f + 0.25f * s(t * 3f + n1 * 10f))
                     val rock = 0.06f + n1 * 0.12f
                     ar = rock * 1.1f + br * 0.04f; ag = rock * 0.9f + bg * 0.03f; ab = rock * 0.8f + bb * 0.03f
-                    val hr2 = br * 0.45f + 0.6f; val hg2 = bg * 0.45f + 0.28f; val hb2 = bb * 0.45f + 0.02f
+                    val hr2 = br * 0.8f + 0.3f; val hg2 = bg * 0.8f + 0.15f; val hb2 = bb * 0.8f + 0.05f
                     val rimIn = (1f - z) * (1f - z) * 0.4f
                     val h3 = heat * heat * heat
                     er = hr2 * (heat * 2f + rimIn) + h3 * 0.7f
@@ -501,14 +501,14 @@ object Premium {
                     val lit = cl * (0.35f + fl * 0.9f)
                     val inner = 1f / (1f + d * d * 6f) * (0.35f + 0.15f * s(t * 7f)) * cl
                     var crk = abs(s(fbm(x * 3f + t * 2f, y * 3f, 2) * 14f + t * 4f)); crk = sat(1f - crk * 7f); crk *= crk * 0.5f
-                    ar = 0.1f + lit * 0.45f + br * 0.08f; ag = 0.11f + lit * 0.45f + bg * 0.08f; ab = 0.15f + lit * 0.5f + bb * 0.08f
+                    ar = 0.06f + lit * (0.2f + br * 0.4f) + br * 0.2f; ag = 0.06f + lit * (0.2f + bg * 0.4f) + bg * 0.2f; ab = 0.08f + lit * (0.22f + bb * 0.4f) + bb * 0.2f
                     er = b * (0.8f + br) + (glow * fl + inner + crk) * br * 0.8f + crk * 0.3f
                     eg = b * (0.8f + bg) + (glow * fl + inner + crk) * bg * 0.8f + crk * 0.3f
                     eb = b * (0.9f + bb) + (glow * fl + inner + crk) * bb * 0.8f + crk * 0.35f
                 }
                 10 -> { // fuego espectral
                     val v = flame(x, y, 0.02f) * (0.75f + 0.25f * z)
-                    fireRamp(v, 0.35f, 0.9f, 1f)
+                    fireRamp(v, lr, lg, lb)
                     ar = br * 0.08f; ag = bg * 0.08f; ab = bb * 0.12f
                 }
                 11 -> { // galaxia espiral
@@ -521,10 +521,10 @@ object Premium {
                     val st = stars(x, y, 13f, 0.88f)
                     val pinkR = 1f; val pinkG = 0.45f; val pinkB = 0.8f
                     val mixk = sat(d * 1.3f)
-                    ar = 0.02f; ag = 0.02f; ab = 0.06f
-                    er = (br + (pinkR - br) * mixk * 0.5f) * dens * 1.5f + bulge * 1.2f + st
-                    eg = (bg + (pinkG - bg) * mixk * 0.5f) * dens * 1.5f + bulge * 1.05f + st
-                    eb = (bb + (pinkB - bb) * mixk * 0.5f) * dens * 1.5f + bulge * 0.8f + st
+                    ar = br * 0.12f + 0.02f; ag = bg * 0.12f + 0.02f; ab = bb * 0.12f + 0.04f
+                    er = (br + (pinkR - br) * mixk * 0.25f) * dens * 1.5f + bulge * 1.2f + st
+                    eg = (bg + (pinkG - bg) * mixk * 0.25f) * dens * 1.5f + bulge * 1.05f + st
+                    eb = (bb + (pinkB - bb) * mixk * 0.25f) * dens * 1.5f + bulge * 0.8f + st
                 }
                 12 -> { // reactor
                     val rr = d * 6f
@@ -585,24 +585,25 @@ object Premium {
                         val line = max(lx, lz) * sat(1.4f - dep * 0.18f)
                         val hz = sat(1f - (y - 0.06f) * 5f)
                         ar = 0.05f; ag = 0.01f; ab = 0.08f
-                        er = (br * 0.5f + 0.55f) * line * 1.3f + hz * 0.6f
-                        eg = (bg * 0.4f + 0.12f) * line * 1.3f + hz * 0.2f
-                        eb = (bb * 0.5f + 0.5f) * line * 1.3f + hz * 0.5f
+                        er = (br * 0.85f + 0.15f) * line * 1.3f + hz * (br * 0.5f + 0.2f)
+                        eg = (bg * 0.85f + 0.08f) * line * 1.3f + hz * (bg * 0.5f + 0.1f)
+                        eb = (bb * 0.85f + 0.15f) * line * 1.3f + hz * (bb * 0.5f + 0.2f)
                     } else {
                         val sky = sat((y + 1f) * 0.9f)
-                        ar = 0.05f + sky * 0.35f; ag = 0.02f + sky * 0.05f; ab = 0.12f + sky * 0.2f
+                        ar = 0.03f + sky * (br * 0.35f + 0.08f); ag = 0.02f + sky * bg * 0.3f; ab = 0.06f + sky * (bb * 0.35f + 0.08f)
                         val sx = x; val sy = y + 0.1f
                         val sd = sqrt(sx * sx + sy * sy)
                         if (sd < 0.5f) {
                             val cut = sy > -0.22f && fr((sy + t * 0.05f) * 13f) < 0.35f + sy * 0.6f
                             if (!cut) {
                                 val gy = sat((sy + 0.5f) / 1f)
-                                er = 1f; eg = 0.85f - gy * 0.55f + bg * 0.2f; eb = 0.3f - gy * 0.1f + bb * 0.4f
-                                er = er * 0.6f + br * 0.4f + 0.3f
+                                er = lr * (1.25f - gy * 0.45f) + 0.15f * (1f - gy)
+                                eg = lg * (1.25f - gy * 0.45f) + 0.12f * (1f - gy)
+                                eb = lb * (1.25f - gy * 0.45f)
                             }
                         } else {
                             val sg = sat(1f - (sd - 0.5f) * 5f)
-                            er = sg * 0.6f * (0.5f + br); eg = sg * 0.2f; eb = sg * 0.4f * (0.5f + bb)
+                            er = sg * 0.6f * br; eg = sg * 0.6f * bg; eb = sg * 0.6f * bb
                             val st = stars(x, y, 12f, 0.9f) * sat(-y * 2f)
                             er += st; eg += st; eb += st
                         }
@@ -616,7 +617,7 @@ object Premium {
                     var b2 = bands * bands
                     val b8 = b2 * b2 * b2 * b2
                     b2 *= (0.35f + streak) * eye
-                    val cr2 = br * 0.6f + 0.4f; val cg2 = bg * 0.6f + 0.04f; val cb2 = bb * 0.6f + 0.1f
+                    val cr2 = br * 0.85f + 0.12f; val cg2 = bg * 0.85f + 0.02f; val cb2 = bb * 0.85f + 0.06f
                     ar = 0.08f; ag = 0.02f; ab = 0.03f
                     er = cr2 * b2 * 1.6f + b8 * 0.45f * eye; eg = cg2 * b2 * 1.6f + b8 * 0.45f * eye; eb = cb2 * b2 * 1.6f + b8 * 0.45f * eye
                 }
@@ -627,14 +628,14 @@ object Premium {
                     val v = r1 * r1 * 1.9f
                     val st = stars(x, y, 14f, 0.9f)
                     ar = 0.02f; ag = 0.02f; ab = 0.05f
-                    er = v * (br * 0.6f + q1 * 0.7f) + st; eg = v * (bg * 0.6f + q2 * 0.25f) + st; eb = v * (bb * 0.6f + (1f - q1) * 0.6f) + st
+                    er = v * (br * 0.85f + q1 * 0.3f) + st; eg = v * (bg * 0.85f + q2 * 0.12f) + st; eb = v * (bb * 0.85f + (1f - q1) * 0.25f) + st
                 }
                 17 -> { // cometa helado
                     val cr = abs(fbm(x * 4f, y * 4f, 3) - 0.5f)
                     var vein = sat(1f - cr * 22f); vein *= vein
                     val mist = fbm(x * 2f + t * 0.2f, y * 2f - t * 0.1f, 2)
                     val gl = stars(x, y, 10f, 0.9f) * 1.6f
-                    ar = 0.5f + br * 0.3f; ag = 0.6f + bg * 0.25f; ab = 0.72f + bb * 0.2f
+                    ar = 0.3f + br * 0.6f; ag = 0.36f + bg * 0.55f; ab = 0.44f + bb * 0.5f
                     er = vein * 0.5f + mist * br * 0.3f + gl; eg = vein * 0.6f + mist * bg * 0.3f + gl; eb = vein * 0.75f + mist * bb * 0.3f + gl
                 }
                 18 -> { // ojo del dragón
@@ -647,9 +648,10 @@ object Premium {
                         val u = ed / ir
                         val ring = sat((u - 0.82f) * 6f)
                         val gold = 1f - u
-                        var irR = (br * u + 1f * gold) * (0.55f + 0.45f * fib) * (1f - ring * 0.8f)
-                        var irG = (bg * u + 0.72f * gold) * (0.55f + 0.45f * fib) * (1f - ring * 0.8f)
-                        var irB = (bb * u + 0.15f * gold) * (0.55f + 0.45f * fib) * (1f - ring * 0.8f)
+                        val gk = gold * 0.45f
+                        var irR = (br * (1f - gk) + 1f * gk) * (0.55f + 0.45f * fib) * (1f - ring * 0.8f) * 1.15f
+                        var irG = (bg * (1f - gk) + 0.75f * gk) * (0.55f + 0.45f * fib) * (1f - ring * 0.8f) * 1.15f
+                        var irB = (bb * (1f - gk) + 0.2f * gk) * (0.55f + 0.45f * fib) * (1f - ring * 0.8f) * 1.15f
                         val pw = 0.07f + 0.05f * q[3]
                         val pxv = ex / pw; val pyv = ey / 0.5f
                         val pu = pxv * pxv + pyv * pyv
@@ -674,17 +676,17 @@ object Premium {
                     val streak = fbm(sw * 0.8f, d * 3f - t, 2)
                     val sp3 = sp * sp * sp
                     val core = 1f / (1f + d * d * 25f) * 1.5f
-                    ar = 0.05f; ag = 0.02f; ab = 0.08f
-                    er = br * sp3 * 1.6f * (0.3f + d) + 0.55f * streak * 0.5f + core
-                    eg = bg * sp3 * 1.6f * (0.3f + d) + 0.15f * streak * 0.5f + core
-                    eb = bb * sp3 * 1.6f * (0.3f + d) + 0.9f * streak * 0.5f + core
+                    ar = br * 0.12f + 0.02f; ag = bg * 0.12f + 0.01f; ab = bb * 0.12f + 0.03f
+                    er = br * sp3 * 1.6f * (0.3f + d) + (br * 0.6f + 0.15f) * streak * 0.5f + core
+                    eg = bg * sp3 * 1.6f * (0.3f + d) + (bg * 0.6f + 0.05f) * streak * 0.5f + core
+                    eb = bb * sp3 * 1.6f * (0.3f + d) + (bb * 0.6f + 0.25f) * streak * 0.5f + core
                 }
                 20 -> { // corona solar (superficie)
                     val gran = fbm(lon * 5f + t * 0.15f, lat * 5f, 3)
                     val ld = 0.5f + 0.5f * z
                     val spot = sat((fbm(lon * 1.5f + t * 0.05f + 9f, lat * 1.5f, 2) - 0.66f) * 8f)
                     val k2 = (0.8f + gran * 0.65f) * ld * (1f - spot * 0.75f) * 1.35f
-                    er = (0.65f + br * 0.4f) * k2; eg = (0.42f + bg * 0.35f) * k2; eb = (0.08f + bb * 0.3f) * k2
+                    er = (br * 0.75f + 0.3f) * k2; eg = (bg * 0.75f + 0.22f) * k2; eb = (bb * 0.75f + 0.1f) * k2
                 }
                 21 -> { // bobina de Tesla (lámpara de plasma)
                     var fil = 0f
@@ -697,8 +699,8 @@ object Premium {
                     }
                     fil = fil * fil * sat(d * 2.2f - 0.25f) * (1f + sat((d - 0.8f) * 6f))
                     val core = if (d < 0.17f) 1.2f else 1f / (1f + (d - 0.17f) * 40f) * 0.7f
-                    ar = 0.05f; ag = 0.02f; ab = 0.08f
-                    val vr = br * 0.6f + 0.4f; val vg = bg * 0.6f + 0.1f; val vb = bb * 0.6f + 0.45f
+                    ar = br * 0.14f + 0.02f; ag = bg * 0.14f + 0.01f; ab = bb * 0.14f + 0.03f
+                    val vr = br * 0.85f + 0.15f; val vg = bg * 0.85f + 0.05f; val vb = bb * 0.85f + 0.2f
                     er = vr * fil * 1.6f + fil * fil * 0.7f + core * (br + 0.6f)
                     eg = vg * fil * 1.6f + fil * fil * 0.7f + core * (bg + 0.6f)
                     eb = vb * fil * 1.6f + fil * fil * 0.7f + core * (bb + 0.6f)
@@ -723,10 +725,10 @@ object Premium {
                     rainbow(v * 0.5f + d * 0.6f + t * 0.1f)
                     val f = 0.3f + 0.9f * sat(v + 0.2f)
                     ar = 0.05f; ag = 0.05f; ab = 0.06f
-                    er = (hr * 0.5f + br * 0.5f) * f; eg = (hg * 0.5f + bg * 0.5f) * f; eb = (hb * 0.5f + bb * 0.5f) * f
+                    er = (hr * 0.25f + br * 0.8f) * f; eg = (hg * 0.25f + bg * 0.8f) * f; eb = (hb * 0.25f + bb * 0.8f) * f
                 }
                 24 -> { // sakura
-                    ar = br * 0.55f + 0.42f; ag = bg * 0.55f + 0.3f; ab = bb * 0.55f + 0.36f
+                    ar = br * 0.72f + 0.26f; ag = bg * 0.72f + 0.17f; ab = bb * 0.72f + 0.22f
                     val bx = x * 4f + t * 0.15f; val by = y * 4f - t * 0.25f
                     val ix = ff(bx); val iy = ff(by)
                     val h = hash(ix, iy)
@@ -737,7 +739,7 @@ object Premium {
                     er = bok * 0.4f + pet * (0.75f + br * 0.3f); eg = bok * 0.32f + pet * (0.45f + bg * 0.2f); eb = bok * 0.38f + pet * (0.55f + bb * 0.3f)
                 }
                 25 -> { // fuegos artificiales
-                    ar = 0.02f + br * 0.03f; ag = 0.02f + bg * 0.03f; ab = 0.05f + bb * 0.03f
+                    ar = 0.02f + br * 0.16f; ag = 0.02f + bg * 0.16f; ab = 0.04f + bb * 0.16f
                     var accR = stars(x, y, 12f, 0.93f) * 0.5f; var accG = accR; var accB = accR
                     for (j in 0 until 4) {
                         val pt = t / 2.2f + j / 4f
@@ -758,9 +760,9 @@ object Premium {
                         val fade = u * sqrt(u)
                         val v = (ringv * 1.9f + tr * 1.3f) * fade + (if (ph < 0.08f) sat(1f - dist * 6f) * (1f - ph / 0.08f) else 0f)
                         val kind = ff(hash(cyc + 5, j) * 3f)
-                        val cr = if (kind == 0) br else if (kind == 1) 1f else bg * 0.3f + 0.7f
-                        val cg = if (kind == 0) bg else if (kind == 1) 0.8f else bb * 0.3f + 0.3f
-                        val cb = if (kind == 0) bb else if (kind == 1) 0.3f else br * 0.3f + 0.8f
+                        val cr = if (kind == 1) 1f else if (kind == 0) br else lr
+                        val cg = if (kind == 1) 0.85f else if (kind == 0) bg else lg
+                        val cb = if (kind == 1) 0.45f else if (kind == 0) bb else lb
                         accR += v * (cr + 0.3f); accG += v * (cg + 0.3f); accB += v * (cb + 0.3f)
                     }
                     er = accR; eg = accG; eb = accB
@@ -788,7 +790,7 @@ object Premium {
                 }
                 29 -> { // fénix (fuego en remolino)
                     val v = sat(flame(x, y, 0.05f) + (1f - d) * 0.12f) * (0.8f + 0.2f * z)
-                    fireRamp(v, 1f, 0.55f, 0.12f)
+                    fireRamp(v, br * 0.6f + 0.4f, bg * 0.6f + 0.22f, bb * 0.6f + 0.05f)
                     ar = 0.05f; ag = 0.02f; ab = 0.01f
                 }
                 30 -> { // mariposa de luz (interior)
@@ -805,18 +807,18 @@ object Premium {
                     val field = sat(1f - abs(f - 0.5f) * 10f) * 0.35f * sat(1f - lv * 0.25f)
                     val flow = sat(1f - abs(fr(lv * 2.2f - t * 0.8f) - 0.5f) * 3f) * field
                     val beam = beam()
-                    ar = 0.02f; ag = 0.02f; ab = 0.04f
+                    ar = br * 0.18f + 0.02f; ag = bg * 0.18f + 0.02f; ab = bb * 0.18f + 0.03f
                     er = core * 0.9f + (field + flow) * br + beam * (0.6f + br * 0.6f)
                     eg = core * 0.95f + (field + flow) * bg + beam * (0.6f + bg * 0.6f)
                     eb = core * 1.1f + (field + flow) * bb + beam * (0.7f + bb * 0.6f)
                 }
                 32 -> { // eclipse: la luna tapa el sol
-                    val sh = fbm(x * 3f, y * 3f, 2) * 0.06f
+                    val sh = 0.1f + fbm(x * 3f, y * 3f, 2) * 0.12f
                     ar = br * sh; ag = bg * sh; ab = bb * sh
                     val rimIn = sat((d - 0.94f) * 16f)
                     val dx = x - q[0]; val dy = y - q[1]
                     val fl = 1f / (1f + (dx * dx + dy * dy) * 900f) * q[2]
-                    er = rimIn * (0.6f + br * 0.5f) + fl * 2f; eg = rimIn * (0.6f + bg * 0.5f) + fl * 2f; eb = rimIn * (0.65f + bb * 0.5f) + fl * 2f
+                    er = rimIn * (br * 1.1f + 0.2f) + fl * 2f; eg = rimIn * (bg * 1.1f + 0.2f) + fl * 2f; eb = rimIn * (bb * 1.1f + 0.22f) + fl * 2f
                 }
                 33 -> { // génesis
                     val pt = t / 4f
@@ -829,14 +831,14 @@ object Premium {
                     val core = 1f / (1f + d * d * (60f * (1f - ph) + 4f)) * (1.4f - ph)
                     val web = sat(1f - abs(fbm(x * 4f, y * 4f, 3) - 0.5f) * 18f) * 0.25f
                     val hot = sat(1f - ph * 2.5f)
-                    ar = 0.03f; ag = 0.02f; ab = 0.05f
+                    ar = br * 0.16f + 0.02f; ag = bg * 0.16f + 0.02f; ab = bb * 0.16f + 0.03f
                     er = sp * (br + hot) * 1.4f + core * (1f + br) + web * br
                     eg = sp * (bg + hot) * 1.4f + core * (0.9f + bg) + web * bg
                     eb = sp * (bb + hot) * 1.4f + core * (0.9f + bb) + web * (bb + 0.3f)
                 }
                 34 -> { // infinito: película iridiscente + lemniscata de luz
                     rainbow(z * 1.3f + fbm(x * 2f + t * 0.2f, y * 2f, 2) * 0.8f + t * 0.08f)
-                    ar = hr * 0.35f + br * 0.35f; ag = hg * 0.35f + bg * 0.35f; ab = hb * 0.35f + bb * 0.35f
+                    ar = hr * 0.22f + br * 0.6f; ag = hg * 0.22f + bg * 0.6f; ab = hb * 0.22f + bb * 0.6f
                     val a2 = 0.72f * 0.72f
                     val r2 = x * x + y * y
                     val f = r2 * r2 - a2 * (x * x - y * y)
@@ -896,7 +898,7 @@ object Premium {
                     if (y > 0.2f) return
                     val fo = flame(x, y, 0f)
                     val v = sat(fo * 1.5f - (d - 1f) * 2.2f) * sat(0.3f - y * 1.5f)
-                    fireRamp(v, 0.35f, 0.9f, 1f)
+                    fireRamp(v, lr, lg, lb)
                     or = er * v; og = eg * v; ob = eb * v
                 }
                 12 -> { // anillo exterior con marcas
@@ -911,13 +913,13 @@ object Premium {
                 }
                 14 -> { // resplandor del horizonte
                     val v = sat(1f - abs(y - 0.06f) * 9f) * sat(1f - (d - 1f) * 2.5f) * 0.9f
-                    or = v * (0.5f + br * 0.5f); og = v * 0.2f; ob = v * (0.4f + bb * 0.5f)
+                    or = v * (0.2f + br * 0.7f); og = v * (0.1f + bg * 0.7f); ob = v * (0.2f + bb * 0.7f)
                 }
                 15 -> { // remolino que sale
                     val sw = ang * 2f - d * 5f + t * 3f
                     var b = 0.5f + 0.5f * s(sw); b *= b * b
                     val v = b * sat(1f - (d - 1f) * 2.2f) * 0.7f
-                    or = v * (br * 0.6f + 0.4f); og = v * bg * 0.5f; ob = v * (bb * 0.6f + 0.1f)
+                    or = v * (br * 0.85f + 0.12f); og = v * bg * 0.85f; ob = v * (bb * 0.85f + 0.06f)
                 }
                 16 -> { // polvo estelar
                     val st = stars(x, y, 10f, 0.9f) * sat(1f - (d - 1f) * 1.6f)
@@ -951,7 +953,7 @@ object Premium {
                     val rays = sat(cr * 1.7f - 0.45f) * sat(1f - (d - 1f) * 1.5f)
                     val lp = sat(1f - abs(d - 1.1f - 0.07f * s(ang * 7f + t)) * 22f) * sat(s(ang * 3f + t * 0.3f))
                     val v = rays * 0.9f + lp * 0.9f
-                    or = v * (0.7f + br * 0.4f); og = v * (0.4f + bg * 0.3f); ob = v * (0.1f + bb * 0.3f)
+                    or = v * (br * 0.8f + 0.25f); og = v * (bg * 0.8f + 0.15f); ob = v * (bb * 0.8f + 0.08f)
                 }
                 21 -> { // chispas donde los rayos tocan el vidrio
                     var best = 0f
@@ -962,7 +964,7 @@ object Premium {
                         if (v > best) best = v
                     }
                     val v = best * best * sat(1f - (d - 1f) * 6f) * 0.8f
-                    or = v * (br * 0.6f + 0.4f); og = v * (bg * 0.6f + 0.2f); ob = v * (bb * 0.6f + 0.5f)
+                    or = v * (br * 0.8f + 0.2f); og = v * (bg * 0.8f + 0.15f); ob = v * (bb * 0.8f + 0.25f)
                 }
                 22 -> orbits(false)
                 24 -> { // pétalos girando alrededor
@@ -991,7 +993,7 @@ object Premium {
                     val v = (sat(cr * 1.8f - 0.55f) * fall * 0.9f + inner * 0.9f)
                     val dx = x - q[0]; val dy = y - q[1]
                     val fl = (1f / (1f + (dx * dx + dy * dy) * 300f) * 2f + sat(1f - abs(dy) * 70f) * sat(1f - abs(dx) * 2f) + sat(1f - abs(dx) * 70f) * sat(1f - abs(dy) * 2f)) * q[2]
-                    or = v * (0.75f + br * 0.4f) + fl; og = v * (0.75f + bg * 0.4f) + fl; ob = v * (0.8f + bb * 0.4f) + fl
+                    or = v * (br * 0.95f + 0.2f) + fl; og = v * (bg * 0.95f + 0.2f) + fl; ob = v * (bb * 0.95f + 0.22f) + fl
                 }
                 33 -> { // chispas que salen disparadas
                     val pt = t / 4f
@@ -1018,7 +1020,7 @@ object Premium {
             return bump(0.14f, 0.05f, 0.12f) - bump(0.285f, 0.015f, 0.18f) + bump(0.31f, 0.02f, 0.85f) - bump(0.34f, 0.02f, 0.32f) + bump(0.56f, 0.07f, 0.22f)
         }
 
-        /** Rampa de fuego: oscuro → color de juego → (acento) → blanco. */
+        /** Rampa de fuego: oscuro → color de juego → (acento, ya teñido) → blanco. */
         private fun fireRamp(v: Float, kr: Float, kg: Float, kb: Float) {
             if (v < 0.35f) {
                 val u = v / 0.35f
@@ -1204,7 +1206,7 @@ object Premium {
                 val feath = 0.6f + 0.4f * s(u * 9f + wx * 4f)
                 val fl = fbm(x * 3f, y * 3f + t * 2.5f, 2)
                 val v = sat(mask * feath * (0.55f + 0.7f * fl) * (1.25f - wx * 0.6f))
-                fireRamp(v, 1f, 0.55f, 0.12f)
+                fireRamp(v, br * 0.6f + 0.4f, bg * 0.6f + 0.22f, bb * 0.6f + 0.05f)
                 or = er * v; og = eg * v; ob = eb * v
             } else {
                 val wyU = (y + 0.3f + wx * 0.25f) / 0.62f; val wxU = (wx - 0.62f) / 0.6f
