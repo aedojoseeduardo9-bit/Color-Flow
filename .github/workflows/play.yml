@@ -82,7 +82,7 @@ jobs:
           gh release delete play --cleanup-tag -y || true
           gh release create play dist/ColorFlow.aab --prerelease --target "$(git rev-parse HEAD)" \
             --title "Color Flow para Google Play" \
-            --notes "Paquete para Play Console (compilación #${{ github.run_number }}). Se sube solo si está la cuenta de servicio; si no, descárgalo y súbelo a mano."
+            --notes "Paquete para Play Console (compilación #$(( ${{ github.run_number }} + 5000 ))). Se sube solo si está la cuenta de servicio; si no, descárgalo y súbelo a mano."
 
       - name: Subir a Google Play
         id: subir

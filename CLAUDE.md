@@ -39,7 +39,7 @@ No hay SDK de Android en el contenedor, pero la app **sí se puede ver**:
    (mundo W desde 0, salta la historia) y `vitrina:W:K` (sala con 3 enemigos nuevos, K = 0, 1 o 2, en modo dios),
    `taller` (editor de salas de la Aventura), `editor:N` y `galeria:N` (editor de niveles y catálogo de obstáculos),
    `niveles`, `temas`, `multi`, `pausa:N`, `ganar:N`, `terminos[:1]` (términos; `:1` con la casilla marcada), `intro:T` (animación de inicio quieta en el segundo T/10), `idioma:L` (0 español, 1 inglés, 2 ruso), `tienda:1` (sin botones de desarrollador), `icono:K` y `legado:1`
-   (dibujo antiguo, para comparar fluidez). Tienda y logros: `monedas:N` (fija las monedas), `comprada:K` (regala y usa la
+   (dibujo antiguo, para comparar fluidez). Tienda y logros: `monedas:N` (fija las monedas y apaga las monedas infinitas de la versión dev), `comprada:K` (regala y usa la
    esfera K de la Tienda; K ≥ 100 = estela K-100), `tiendaver:T:K` (Tienda en la pestaña T con la K elegida), `logros`,
    `aviso:K` (aviso del logro K), `regalo` (regalo diario) e `infinitofin:N` (final del infinito con N puntos).
    Se pueden encadenar con coma: `legado:1,nivel:14`.
@@ -94,7 +94,8 @@ No hay SDK de Android en el contenedor, pero la app **sí se puede ver**:
   esfera+tamaño+color, repintada ~30 veces por segundo y repartida entre núcleos), `Logros.kt` (33 logros con monedas),
   estelas especiales 41..50 en `Trails.kt`. En `GameView`: `drawShop`, `drawAchievements`, `drawToast` (aviso de logro),
   `drawGift` (regalo diario), `checkAch`. Monedas: modo infinito (1 por obstáculo), Aventura (enemigos, jefes, mundos),
-  logros y regalo diario.
+  logros y regalo diario. La versión de desarrollador tiene monedas infinitas (`Prefs.infiniteCoins`, interruptor en
+  Ajustes); `tienda:1` y `monedas:N` las apagan para las capturas.
 - `Prefs.kt` (guardado), `Audio.kt`, `I18n.kt` (español/inglés/ruso: todo texto nuevo va con su `d(...)`),
   `Skins.kt`, `Trails.kt`, `Theme.kt`, `Spooky.kt`/`Cats.kt`/`Dogs.kt` (temas), `Gl.kt` (ayudas de dibujo).
 - `tools/` — pruebas (`SimTest.kt`, `AdvTest.kt`), `apply_levels.py` (niveles publicados desde el editor), audio.
