@@ -4056,7 +4056,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             val k = skin - Skins.PREMIUM_FIRST
             if (glow) Gl.glow(c, x, y, r * 2.6f, col, 80)
             PremiumDraw.draw(c, x, y, r, col, k, tm, premCap, premFps)
-            premiumSparks(c, x, y, r, Premium.tier[k], tm)
+            premiumSparks(c, x, y, r, Premium.tier[k], tm, col)
             return
         }
         if (glow) Gl.glow(c, x, y, r * 2.8f, col, 110)
@@ -5821,17 +5821,14 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     private fun coinPill(c: Canvas, cx: Float, cy: Float, tappable: Boolean) {
         val txt = prefs.coins.toString()
         val tw = Gl.textWidth(txt, 44f, Gl.medium, 0f, false)
-        val w = max(190f, tw + 124f)
+        val w = max(170f, tw + 110f)
         val pressed = tappable && pressedId == "shop"
         val s = if (pressed) 0.95f else 1f
         Gl.glow(c, cx, cy, w * 0.7f, gold, 40)
         Gl.panel(c, cx - w / 2f * s, cy - 42f * s, cx + w / 2f * s, cy + 42f * s, 42f * s, if (pressed) 1.25f else 1f, gold)
         Gl.coin(c, cx - w / 2f + 48f, cy, 26f, time)
         Gl.text(c, txt, cx - w / 2f + 86f, cy + 16f, 44f, Gl.medium, 0xFFFFE9A8.toInt(), 0f, null, 0, Paint.Align.LEFT, false)
-        if (tappable) {
-            Gl.text(c, "+", cx + w / 2f - 30f, cy + 15f, 44f, Gl.light, Gl.white(200), 0f, null, 0, Paint.Align.CENTER, false)
-            hits.add(Hit("shop", cx - w / 2f - 10f, cy - 52f, cx + w / 2f + 10f, cy + 52f))
-        }
+        if (tappable) hits.add(Hit("shop", cx - w / 2f - 10f, cy - 52f, cx + w / 2f + 10f, cy + 52f))
     }
 
     private fun iconShop(c: Canvas, x: Float, y: Float, r: Float) {
@@ -5869,21 +5866,30 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         Gl.text(c, "!", x, y + 10f, 28f, Gl.medium, Color.WHITE, 0f, null, 0, Paint.Align.CENTER, false)
     }
 
-    /** Destellos que orbitan las esferas de la Tienda: más, según la rareza. */
-    private fun premiumSparks(c: Canvas, x: Float, y: Float, r: Float, tier: Int, tm: Float) {
-        val n = 1 + tier * 2
-        val tc = Premium.tierColor[tier]
+    /** Destellos que orbitan las esferas de la Tienda (más según la rareza): estrellitas blancas que brillan con el
+     *  color de juego, para no confundir el color de la bola. */
+    private fun premiumSparks(c: Canvas, x: Float, y: Float, r: Float, tier: Int, tm: Float, col: Int) {
+        val n = 1 + tier
         for (i in 0 until n) {
             val a = tm * (0.9f + 0.17f * i) + i * 6.2832f / n
-            val rr = r * (1.22f + 0.1f * sin(tm * 2f + i))
+            val rr = r * (1.25f + 0.1f * sin(tm * 2f + i))
             val px = x + cos(a) * rr
-            val py = y + sin(a) * rr * 0.5f - r * 0.1f
+            val py = y + sin(a) * rr * 0.45f - r * 0.12f
             val front = sin(a) > 0f
             val tw = 0.5f + 0.5f * sin(tm * 6f + i * 2f)
-            val s = r * (0.06f + 0.06f * tw) * (if (front) 1f else 0.6f)
-            Gl.glow(c, px, py, s * 4.5f, tc, if (front) 140 else 60)
-            Gl.line(c, px - s * 2f, py, px + s * 2f, py, s * 0.45f + 0.5f, Gl.white(if (front) 240 else 120))
-            Gl.line(c, px, py - s * 2f, px, py + s * 2f, s * 0.45f + 0.5f, Gl.white(if (front) 240 else 120))
+            val s = r * (0.04f + 0.04f * tw) * (if (front) 1f else 0.6f)
+            if (s < 0.6f) continue
+            Gl.glow(c, px, py, s * 3.6f, col, if (front) 110 else 50)
+            Gl.path.reset()
+            Gl.path.moveTo(px, py - s * 2.2f)
+            Gl.path.quadTo(px, py, px + s * 2.2f, py)
+            Gl.path.quadTo(px, py, px, py + s * 2.2f)
+            Gl.path.quadTo(px, py, px - s * 2.2f, py)
+            Gl.path.quadTo(px, py, px, py - s * 2.2f)
+            Gl.path.close()
+            val pp = Gl.p()
+            pp.color = Gl.white(if (front) 235 else 120)
+            c.drawPath(Gl.path, pp)
         }
     }
 
@@ -5998,11 +6004,11 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             Gl.text(c, tierLabel(t2), cx, t + 44f, 22f, Gl.medium, tc2, 0.25f)
             val bc = pal[j % 4] // color fijo por casilla: cada imagen se reutiliza (no se crea otra al cambiar el color)
             if (shopTab == 0) {
-                drawBallAt(c, cx, cy - 22f, 66f, bc, Skins.PREMIUM_FIRST + j, time, false)
+                drawBallAt(c, cx, cy - 22f, 74f, bc, Skins.PREMIUM_FIRST + j, time, false)
             } else {
                 c.save()
-                c.clipRect(l + 6f, t + 56f, r - 6f, b - 90f)
-                drawTrailDemo(c, Trails.PREMIUM_FIRST + j, cx - 112f, cx + 112f, cy - 26f, 34f, 26f, bc, pal, time, 22f)
+                c.clipRect(l + 6f, t + 54f, r - 6f, b - 84f)
+                drawTrailDemo(c, Trails.PREMIUM_FIRST + j, cx - 128f, cx + 128f, cy - 24f, 40f, 32f, bc, pal, time, 25f)
                 c.restore()
             }
             Gl.textFit(c, shopName(j), cx, cy + 92f, 32f, cwid - 30f, Gl.medium, Gl.white(245))
@@ -6249,6 +6255,10 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val t = cy - ph / 2f
         val b = cy + ph / 2f
         Gl.glow(c, 540f, cy, 700f, 0xFFFF5FA0.toInt(), 50)
+        val bk = Gl.p()
+        bk.color = Color.argb(150, 8, 10, 24)
+        Gl.rect.set(90f, t, 990f, b)
+        c.drawRoundRect(Gl.rect, 70f, 70f, bk)
         glassWindow(c, 90f, t, 990f, b, 70f, 1.1f, gold)
         Gl.text(c, "REGALO DIARIO", 540f, t + 112f, 60f, Gl.medium, Gl.white(250), 0.1f)
         Gl.textFit(c, "Vuelve cada día: el premio crece", 540f, t + 172f, 34f, 820f, Gl.regular, Gl.white(200))

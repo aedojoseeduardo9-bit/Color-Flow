@@ -509,7 +509,7 @@ object Premium {
                 10 -> { // fuego espectral
                     val v = flame(x, y, 0.02f) * (0.75f + 0.25f * z)
                     fireRamp(v, lr, lg, lb)
-                    ar = br * 0.08f; ag = bg * 0.08f; ab = bb * 0.12f
+                    ar = br * 0.28f + 0.02f; ag = bg * 0.28f + 0.02f; ab = bb * 0.28f + 0.03f
                 }
                 11 -> { // galaxia espiral
                     val a = ang - t * 0.35f
@@ -791,7 +791,7 @@ object Premium {
                 29 -> { // fénix (fuego en remolino)
                     val v = sat(flame(x, y, 0.05f) + (1f - d) * 0.12f) * (0.8f + 0.2f * z)
                     fireRamp(v, br * 0.6f + 0.4f, bg * 0.6f + 0.22f, bb * 0.6f + 0.05f)
-                    ar = 0.05f; ag = 0.02f; ab = 0.01f
+                    ar = br * 0.25f + 0.03f; ag = bg * 0.25f + 0.02f; ab = bb * 0.25f + 0.01f
                 }
                 30 -> { // mariposa de luz (interior)
                     val gw = 1f - d * 0.7f

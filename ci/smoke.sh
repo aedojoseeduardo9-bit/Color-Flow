@@ -201,6 +201,14 @@ perf() {
     go nivel:14 6;              perf "nivel14_nuevo$k" 1
     go legado:1,nivel:14 6;     perf "nivel14_antiguo$k" 1
   done
+  # esferas de la Tienda (pintadas píxel por píxel): bola común contra esfera de la Tienda, alternadas
+  echo "== TIENDA: esfera común vs esfera pintada píxel por píxel"
+  for k in 1 2; do
+    go esfera:56,nivel:14 6;          perf "nivel14_esfera_comun$k" 1
+    go comprada:29,nivel:14 6;        perf "nivel14_esfera_fenix$k" 1
+  done
+  go monedas:640,tiendaver:0:28 6;    perf tienda_esferas 0
+  go tiendaver:1:5 6;                 perf tienda_estelas 0
   echo "== MEMORIA"
   timeout 20 adb shell dumpsys meminfo $P | grep -E "TOTAL PSS|TOTAL:|Java Heap|Native Heap|Graphics" | head -6
 } > perf.txt 2>&1
