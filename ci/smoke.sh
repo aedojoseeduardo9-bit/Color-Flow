@@ -78,6 +78,7 @@ alive() { adb shell pidof $P > /dev/null 2>&1 && echo "  app viva" || echo "  LA
   go logros 6;                        shot 45_logros "Logros (desde Ajustes)"; alive
   go aviso:21 2;                      shot 46_aviso "aviso de logro"; alive
   go regalo 5;                        shot 47_regalo "regalo diario"; alive
+  timeout 10 adb shell input tap 540 1650; sleep 0.6; shot 47b_regalo_abriendo "regalo: la caja se abre (botón Recoger)"; sleep 1.6; shot 47c_regalo_abierto "regalo: monedas entregadas"; alive
   go infinitofin:37 6;                shot 48_infinito_fin "fin del infinito con monedas ganadas"; alive
 } > steps.txt 2>&1
 

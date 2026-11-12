@@ -6213,8 +6213,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         c.drawRoundRect(Gl.rect, s * 0.06f, s * 0.06f, pp)
         // tapa
         c.save()
-        c.translate(0f, -open * s * 0.9f)
-        c.rotate(-open * 24f, x + s * 0.7f, y - s * 0.12f)
+        c.translate(0f, -open * s * 0.85f)
+        c.rotate(-open * 8f, x, y - s * 0.22f)
         pp = Gl.p()
         pp.color = Gl.darken(body, 0.85f)
         Gl.rect.set(x - s * 0.72f, y - s * 0.36f, x + s * 0.72f, y - s * 0.08f)
@@ -6241,7 +6241,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val ready = giftReady()
         val y = cy - (if (ready) abs(sin(time * 3f)) * 10f else 0f)
         if (ready) Gl.glow(c, cx, y, 130f, 0xFFFF5FA0.toInt(), (70 + 30 * sin(time * 4f)).toInt())
-        iconButton(c, "gift", cx, y, 58f) { cc, x, yy, r -> drawGiftBox(cc, x, yy + 6f, r * 0.62f, 0f, time) }
+        iconButton(c, "gift", cx, y, 58f) { cc, x, yy, r -> drawGiftBox(cc, x, yy - r * 0.02f, r * 0.6f, 0f, time) }
         if (ready) {
             badge(c, cx + 44f, y - 44f)
         } else {
@@ -6253,79 +6253,135 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     }
 
     /** Ventana del regalo diario: la caja se abre y entrega monedas; 7 días con premios cada vez mayores. */
+    private var giftSh: Shader? = null
+    private var giftShT = Float.NaN
+
+    /** Ventana del regalo diario: marco sólido y centrado (no se ve el menú detrás); la caja se abre dentro del marco
+     *  y entrega monedas; abajo los 7 días con premios cada vez mayores. */
     private fun drawGift(c: Canvas) {
         hits.clear()
         hits.add(Hit("gift_bg", -Cfg.W, -vh, Cfg.W * 2f, vh * 2f))
-        val a = ((time - giftDlgT) / 0.3f).coerceIn(0f, 1f)
-        dim(c, if (giftDlg == 2) 170 else (170 * a).toInt())
+        val opened = giftDlg == 2
+        val a = if (opened) 1f else ((time - giftDlgT) / 0.3f).coerceIn(0f, 1f)
+        dim(c, (215 * a).toInt())
         val cy = vh / 2f
-        val ph = 1220f
-        val z = min(1f, (vh - 80f) / ph) * (if (giftDlg == 2) 1f else 0.86f + 0.14f * spring(a))
+        val ph = 1240f
+        val l = 100f
+        val r = 980f
+        val z = min(1f, (vh - 100f) / ph) * (if (opened) 1f else 0.88f + 0.12f * spring(a))
         c.save()
         c.scale(z, z, 540f, cy)
         val t = cy - ph / 2f
         val b = cy + ph / 2f
-        Gl.glow(c, 540f, cy, 700f, 0xFFFF5FA0.toInt(), 50)
-        val bk = Gl.p()
-        bk.color = Color.argb(150, 8, 10, 24)
-        Gl.rect.set(90f, t, 990f, b)
-        c.drawRoundRect(Gl.rect, 70f, 70f, bk)
-        glassWindow(c, 90f, t, 990f, b, 70f, 1.1f, gold)
-        Gl.text(c, "REGALO DIARIO", 540f, t + 112f, 60f, Gl.medium, Gl.white(250), 0.1f)
-        Gl.textFit(c, "Vuelve cada día: el premio crece", 540f, t + 172f, 34f, 820f, Gl.regular, Gl.white(200))
-        val opened = giftDlg == 2
-        val oa = if (opened) ((time - giftDlgT) / 0.6f).coerceIn(0f, 1f) else 0f
-        val gy = t + 420f
-        if (opened) {
-            tierRays(c, 540f, gy - 40f, 420f, 3, gold)
-            Gl.glow(c, 540f, gy - 60f, 320f, gold, (110 * oa).toInt())
+        // marco: sombra, relleno opaco (degradado guardado mientras no cambie la posición) y borde dorado
+        var pp = Gl.p()
+        pp.color = Color.argb(140, 0, 0, 0)
+        Gl.rect.set(l + 6f, t + 18f, r + 6f, b + 26f)
+        c.drawRoundRect(Gl.rect, 64f, 64f, pp)
+        if (giftSh == null || giftShT != t) {
+            giftSh = LinearGradient(0f, t, 0f, b, intArrayOf(0xFF33205A.toInt(), 0xFF1C1238.toInt(), 0xFF0E0A20.toInt()),
+                floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+            giftShT = t
         }
-        val bounce = if (!opened && giftReady()) abs(sin(time * 3f)) * 18f else 0f
-        drawGiftBox(c, 540f, gy - bounce, 170f, easeOut(oa), time)
+        pp = Gl.p()
+        pp.shader = giftSh
+        Gl.rect.set(l, t, r, b)
+        c.drawRoundRect(Gl.rect, 64f, 64f, pp)
+        pp = Gl.p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = 5f
+        pp.color = Gl.alpha(gold, 230)
+        c.drawRoundRect(Gl.rect, 64f, 64f, pp)
+        pp = Gl.p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = 2f
+        pp.color = Gl.white(40)
+        Gl.rect.set(l + 14f, t + 14f, r - 14f, b - 14f)
+        c.drawRoundRect(Gl.rect, 52f, 52f, pp)
+
+        Gl.text(c, "REGALO DIARIO", 540f, t + 116f, 60f, Gl.medium, Gl.white(250), 0.1f, null, gold)
+        Gl.textFit(c, "Vuelve cada día: el premio crece", 540f, t + 176f, 34f, 780f, Gl.regular, Gl.white(200))
+
+        // escenario de la caja: todo queda dentro del marco
+        val oa = if (opened) ((time - giftDlgT) / 0.6f).coerceIn(0f, 1f) else 0f
+        val gy = t + 440f
+        c.save()
+        c.clipRect(l + 20f, t + 200f, r - 20f, t + 640f)
+        Gl.glow(c, 540f, gy, 300f, gold, if (opened) 90 else 45)
+        if (opened) {
+            pp = Gl.p()
+            for (i in 0 until 12) {
+                val a0 = time * 0.35f + i * 0.5236f
+                Gl.path.reset()
+                Gl.path.moveTo(540f, gy)
+                Gl.path.lineTo(540f + cos(a0 - 0.09f) * 420f, gy + sin(a0 - 0.09f) * 420f)
+                Gl.path.lineTo(540f + cos(a0 + 0.09f) * 420f, gy + sin(a0 + 0.09f) * 420f)
+                Gl.path.close()
+                pp.color = Gl.alpha(gold, (46 * oa).toInt())
+                c.drawPath(Gl.path, pp)
+            }
+            // monedas que saltan de la caja
+            val ca = ((time - giftDlgT) / 1.1f).coerceIn(0f, 1f)
+            if (ca < 1f) for (i in 0 until 10) {
+                val ang = -1.5708f + (i - 4.5f) * 0.22f
+                val sp = 300f + (i % 3) * 70f
+                val px = 540f + cos(ang) * sp * ca
+                val py = gy - 60f + sin(ang) * sp * ca + 520f * ca * ca
+                Gl.coin(c, px, py, 18f * (1f - ca * 0.4f), time * 3f + i)
+            }
+        }
+        // sombra en el piso y la caja, centrada
+        val bounce = if (!opened && giftReady()) abs(sin(time * 3f)) * 12f else 0f
+        pp = Gl.p()
+        pp.color = Color.argb(90, 0, 0, 0)
+        Gl.rect.set(540f - 120f + bounce, gy + 128f, 540f + 120f - bounce, gy + 152f)
+        c.drawOval(Gl.rect, pp)
+        drawGiftBox(c, 540f, gy - 10f - bounce, 160f, easeOut(oa), time)
         if (opened) {
             val ra = easeOut(((time - giftDlgT - 0.2f) / 0.6f).coerceIn(0f, 1f))
             val txt = "+$giftGot"
             val tw = Gl.textWidth(txt, 90f, Gl.medium, 0f, false)
-            val yy = gy - 120f - ra * 90f
-            Gl.coin(c, 540f - tw / 2f - 36f, yy - 30f, 44f * ra + 1f, time * 2f)
-            Gl.text(c, txt, 540f + 30f, yy, 90f, Gl.medium, Gl.alpha(0xFFFFE08A.toInt(), (255 * ra).toInt()), 0f, null, gold, Paint.Align.CENTER, false)
+            val yy = gy - 70f - ra * 70f
+            Gl.coin(c, 540f - tw / 2f - 30f, yy - 30f, 42f * ra + 1f, time * 2f)
+            Gl.text(c, txt, 540f + 26f, yy, 90f, Gl.medium, Gl.alpha(0xFFFFE08A.toInt(), (255 * ra).toInt()), 0f, null, gold, Paint.Align.CENTER, false)
         }
-        // los 7 días
+        c.restore()
+
+        // los 7 días, centrados
         val idx = giftIdx()
         val claimedToday = !giftReady()
         val dy = t + 760f
         for (d in 0 until 7) {
-            val cx = 540f + (d - 3) * 118f
+            val cx = 540f + (d - 3) * 116f
             val done = d < idx || (claimedToday && d == idx)
             val now = d == idx
-            Gl.panel(c, cx - 52f, dy - 78f, cx + 52f, dy + 78f, 28f, if (now) 1.4f else 0.8f, if (now) gold else cur()[1])
-            if (now && !claimedToday) {
-                val pp = Gl.p()
-                pp.style = Paint.Style.STROKE
-                pp.strokeWidth = 4f
-                pp.color = Gl.alpha(gold, (160 + 90 * sin(time * 5f)).toInt())
-                Gl.rect.set(cx - 52f, dy - 78f, cx + 52f, dy + 78f)
-                c.drawRoundRect(Gl.rect, 28f, 28f, pp)
-            }
-            Gl.textFit(c, "Día ${d + 1}", cx, dy - 44f, 24f, 96f, Gl.medium, Gl.white(210))
+            pp = Gl.p()
+            pp.color = if (now) Gl.alpha(gold, 60) else Gl.white(16)
+            Gl.rect.set(cx - 51f, dy - 78f, cx + 51f, dy + 78f)
+            c.drawRoundRect(Gl.rect, 26f, 26f, pp)
+            pp = Gl.p()
+            pp.style = Paint.Style.STROKE
+            pp.strokeWidth = if (now) 4f else 2f
+            pp.color = if (now) Gl.alpha(gold, if (claimedToday) 220 else (160 + 90 * sin(time * 5f)).toInt()) else Gl.white(50)
+            c.drawRoundRect(Gl.rect, 26f, 26f, pp)
+            Gl.textFit(c, "Día ${d + 1}", cx, dy - 44f, 24f, 94f, Gl.medium, Gl.white(210))
             Gl.coin(c, cx, dy + 6f, if (d == 6) 26f else 20f, time + d)
             Gl.text(c, GIFT[d].toString(), cx, dy + 58f, 28f, Gl.medium, 0xFFFFE08A.toInt(), 0f, null, 0, Paint.Align.CENTER, false)
             if (done) {
-                val pp = Gl.p()
-                pp.color = Color.argb(150, 10, 40, 24)
-                Gl.rect.set(cx - 52f, dy - 78f, cx + 52f, dy + 78f)
-                c.drawRoundRect(Gl.rect, 28f, 28f, pp)
+                pp = Gl.p()
+                pp.color = Color.argb(160, 10, 40, 24)
+                c.drawRoundRect(Gl.rect, 26f, 26f, pp)
                 Gl.line(c, cx - 20f, dy + 2f, cx - 4f, dy + 20f, 9f, 0xFF6CFFB0.toInt())
                 Gl.line(c, cx - 4f, dy + 20f, cx + 24f, dy - 16f, 9f, 0xFF6CFFB0.toInt())
             }
         }
         val streak = if (prefs.giftDay >= today() - 1) prefs.giftStreak else 0
-        Gl.textFit(c, String.format(I18n.t("Racha: %d días seguidos"), streak), 540f, dy + 150f, 34f, 820f, Gl.regular, Gl.white(200), translate = false)
+        Gl.textFit(c, String.format(I18n.t("Racha: %d días seguidos"), streak), 540f, dy + 150f, 34f, 780f, Gl.regular, Gl.white(200), translate = false)
         if (!opened && giftReady()) {
-            button(c, "gift_take", "Recoger", 540f, b - 150f, 640f, 126f, 0xFFFFB020.toInt(), 54f)
+            button(c, "gift_take", "Recoger", 540f, b - 140f, 640f, 126f, 0xFFFFB020.toInt(), 54f)
         } else {
-            if (!opened) Gl.textFit(c, "Vuelve mañana por más", 540f, b - 260f, 36f, 820f, Gl.medium, 0xFFFFE08A.toInt())
-            button(c, "gift_close", if (opened) "¡Genial!" else "Cerrar", 540f, b - 150f, 640f, 126f, cur()[0], 50f)
+            if (!opened) Gl.textFit(c, "Vuelve mañana por más", 540f, b - 250f, 36f, 780f, Gl.medium, 0xFFFFE08A.toInt())
+            button(c, "gift_close", if (opened) "¡Genial!" else "Cerrar", 540f, b - 140f, 640f, 126f, cur()[0], 50f)
         }
         c.restore()
     }
