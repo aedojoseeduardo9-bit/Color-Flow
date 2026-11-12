@@ -183,12 +183,62 @@ class Prefs(context: Context) {
         return n
     }
 
+    /** Niveles con al menos `min` estrellas. */
+    fun levelsWith(min: Int): Int {
+        var n = 0
+        for (i in 1..Levels.COUNT) if (starArr[i] >= min) n++
+        return n
+    }
+
+    // ---------------- monedas, Tienda, logros y regalo diario ----------------
+    var coins: Int
+        get() = sp.getInt("coins", 0)
+        set(v) { sp.edit().putInt("coins", v.coerceAtLeast(0)).apply() }
+
+    /** Suma monedas ganadas (también cuentan para los logros de monedas). */
+    fun earn(n: Int) {
+        if (n <= 0) return
+        sp.edit().putInt("coins", coins + n).putInt("st_coins", stat("coins") + n).apply()
+    }
+
+    /** Contadores para los logros (enemigos, jefes, partidas…). */
+    fun stat(k: String): Int = sp.getInt("st_$k", 0)
+    fun addStat(k: String, n: Int = 1) { sp.edit().putInt("st_$k", stat(k) + n).apply() }
+    fun maxStat(k: String, v: Int) { if (v > stat(k)) sp.edit().putInt("st_$k", v).apply() }
+
+    /** Esferas de la Tienda compradas (un bit por esfera). */
+    var ownSpheres: Long
+        get() = sp.getLong("ownS", 0L)
+        set(v) { sp.edit().putLong("ownS", v).apply() }
+    fun ownsSphere(i: Int): Boolean = i in 0 until 63 && (ownSpheres shr i) and 1L == 1L
+
+    /** Estelas especiales compradas (un bit por estela). */
+    var ownTrails: Int
+        get() = sp.getInt("ownT", 0)
+        set(v) { sp.edit().putInt("ownT", v).apply() }
+    fun ownsTrail(i: Int): Boolean = i in 0 until 31 && (ownTrails shr i) and 1 == 1
+
+    /** Logros conseguidos (un bit por logro). */
+    var achMask: Long
+        get() = sp.getLong("ach", 0L)
+        set(v) { sp.edit().putLong("ach", v).apply() }
+
+    /** Regalo diario: último día recogido (días desde 1970, hora local) y días seguidos. */
+    var giftDay: Int
+        get() = sp.getInt("giftDay", -10)
+        set(v) { sp.edit().putInt("giftDay", v).apply() }
+    var giftStreak: Int
+        get() = sp.getInt("giftStreak", 0)
+        set(v) { sp.edit().putInt("giftStreak", v).apply() }
+
     fun resetProgress() {
         for (i in starArr.indices) starArr[i] = 0
         val ed = sp.edit().putString("stars", "").putInt("endlessBest", 0).putBoolean("allOpen", false)
         // también la Aventura: mundos salvados y partidas guardadas de cada mundo
         ed.remove("advMask")
-        for (k in sp.all.keys) if (k.startsWith("advS")) ed.remove(k)
+        // monedas, compras de la Tienda, logros y contadores
+        ed.remove("coins").remove("ownS").remove("ownT").remove("ach").remove("giftDay").remove("giftStreak")
+        for (k in sp.all.keys) if (k.startsWith("advS") || k.startsWith("st_")) ed.remove(k)
         ed.apply()
     }
 

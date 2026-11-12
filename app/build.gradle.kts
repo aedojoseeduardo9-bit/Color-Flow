@@ -3,7 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val runNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+// +5000: al pasar al repositorio nuevo el contador de GitHub Actions volvió a 1; las versiones ya instaladas de la cuenta
+// anterior tienen números menores a 5000, así que deben ver estas como más nuevas (botón "Actualización").
+val runNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt() + 5000
 // Minutos desde 1970: siempre crece, así cada compilación se instala encima de la anterior
 // aunque cambie el repositorio o se reinicie el contador de GitHub Actions.
 val buildMinutes = (System.currentTimeMillis() / 60000L).toInt()

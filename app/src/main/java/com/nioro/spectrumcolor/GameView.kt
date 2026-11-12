@@ -48,7 +48,7 @@ interface HostApi {
  */
 class GameView(context: Context, private val api: HostApi) : View(context), Choreographer.FrameCallback, android.hardware.SensorEventListener {
 
-    private enum class Scr { TERMS, HOME, LEVELS, SETTINGS, PLAY, MP_MENU, MP_HOST, MP_JOIN, SKINS, THEMES, EDITOR, EDIT_HOME, ADV_MENU, ADV }
+    private enum class Scr { TERMS, HOME, LEVELS, SETTINGS, PLAY, MP_MENU, MP_HOST, MP_JOIN, SKINS, THEMES, EDITOR, EDIT_HOME, ADV_MENU, ADV, SHOP, ACHIEV }
     private enum class Mode { LEVEL, ENDLESS, MP }
     private enum class Ov { NONE, PAUSE, DEAD, WIN }
 
@@ -71,6 +71,12 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     // ---- actualización (0 = sin comprobar, 1 = buscando, 2 = al día, 3 = hay versión nueva, 4 = sin conexión, 5 = GitHub no respondió: reintentar) ----
     @Volatile private var updState = 0
     @Volatile private var updNew = 0
+
+    private val appVersion: String = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2"
+    } catch (e: Exception) {
+        "2"
+    }
 
     private fun installedBuild(): Int = try {
         val vn = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
@@ -155,7 +161,12 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     private val advUi = AdvUi(
         { cv, x, y, r, col -> drawBallAt(cv, x, y, r, col, effSkin(), time, true) },
         { audio.play(it) },
-        { w -> prefs.advMask = prefs.advMask or (1 shl w); Integer.bitCount(prefs.advMask and ((1 shl AdvCfg.WORLDS) - 1)) },
+        { w ->
+            val first = (prefs.advMask shr w) and 1 == 0
+            prefs.advMask = prefs.advMask or (1 shl w)
+            prefs.earn(if (first) 100 else 25)
+            Integer.bitCount(prefs.advMask and ((1 shl AdvCfg.WORLDS) - 1))
+        },
         { advExit() }
     )
     private var advPending = -1
@@ -192,6 +203,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             return
         }
         endIntro()
+        giftAuto = false // las capturas de prueba no deben quedar tapadas por el regalo diario
         val n1 = p.getOrNull(1)?.toIntOrNull() ?: 0
         val n2 = p.getOrNull(2)?.toIntOrNull() ?: 0
         when (p[0]) {
@@ -233,6 +245,18 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             "multi" -> scr = Scr.MP_MENU
             "pausa" -> if (Levels.isPlayable(n1)) { prefs.allOpen = true; startLevel(n1); ov = Ov.PAUSE; ovT0 = time }
             "ganar" -> if (Levels.isPlayable(n1)) { prefs.allOpen = true; startLevel(n1); endHandled = true; earnedStars = 3; ov = Ov.WIN; ovT0 = time }
+            // Tienda, monedas y logros: "monedas:N" fija las monedas; "comprada:K" regala la esfera K de la Tienda
+            // (K ≥ 100: la estela K-100) y la usa; "tiendaver:T:K" abre la pestaña T con la K elegida;
+            // "logros" abre la lista; "aviso" muestra un aviso de logro; "regalo" abre el regalo diario;
+            // "infinitofin:N" muestra el final del modo infinito con N puntos
+            "monedas" -> prefs.coins = n1
+            "comprada" -> if (n1 >= 100) { if (n1 - 100 in Trails.price.indices) { prefs.ownTrails = prefs.ownTrails or (1 shl (n1 - 100)); prefs.trail = Trails.PREMIUM_FIRST + n1 - 100 } }
+                else if (n1 in 0 until Premium.COUNT) { prefs.ownSpheres = prefs.ownSpheres or (1L shl n1); prefs.skin = Skins.PREMIUM_FIRST + n1 }
+            "tiendaver" -> { prefs.allOpen = false; openShop(Scr.SKINS, n1.coerceIn(0, 1)); shopSel = n2; skinScroll = ((n2 / 3) * 360f - 200f).coerceAtLeast(0f) }
+            "logros" -> { scr = Scr.ACHIEV; skinScroll = 0f; skinVel = 0f }
+            "aviso" -> pushToast(Toast("¡Logro desbloqueado!", Logros.list[n1.coerceIn(0, Logros.COUNT - 1)].name, Logros.list[n1.coerceIn(0, Logros.COUNT - 1)].reward, 0))
+            "regalo" -> { goHome(); prefs.giftDay = -10; giftDlg = 1; giftDlgT = time }
+            "infinitofin" -> { startEndless(); runCoins = n1; endHandled = true; newBest = true; prefs.endlessBest = max(prefs.endlessBest, n1); ov = Ov.DEAD; ovT0 = time; sim?.let { it.starCount = n1 } }
         }
     }
 
@@ -260,7 +284,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     private fun depthOf(s: Scr): Int = when (s) {
         Scr.HOME, Scr.TERMS -> 0
         Scr.LEVELS, Scr.SETTINGS, Scr.MP_MENU, Scr.SKINS, Scr.EDIT_HOME, Scr.ADV_MENU -> 1
-        Scr.THEMES, Scr.MP_HOST, Scr.MP_JOIN, Scr.EDITOR -> 2
+        Scr.THEMES, Scr.MP_HOST, Scr.MP_JOIN, Scr.EDITOR, Scr.SHOP, Scr.ACHIEV -> 2
         Scr.PLAY, Scr.ADV -> 3
     }
     private var scr = Scr.HOME
@@ -631,13 +655,18 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     fun onBack(): Boolean {
         if (intro != null) { endIntro(); return true }
         when (scr) {
-            Scr.HOME, Scr.TERMS -> return false
+            Scr.HOME, Scr.TERMS -> {
+                if (scr == Scr.HOME && giftDlg != 0) { giftDlg = 0; audio.play(Sfx.BACK); return true }
+                return false
+            }
             Scr.ADV_MENU -> goHome()
             Scr.ADV -> { if (advUi.active) advUi.back() else if (!advLeaving) advExit() }
             Scr.LEVELS -> if (edMode) { edMode = false; scr = Scr.EDIT_HOME; edRefreshPending() } else goHome()
             Scr.SETTINGS -> if (resetDlg != 0) resetDlg = 0 else goHome()
             Scr.MP_MENU, Scr.SKINS, Scr.EDIT_HOME -> goHome()
             Scr.THEMES -> scr = Scr.SETTINGS
+            Scr.SHOP -> { scr = shopFrom; if (shopFrom == Scr.SKINS) { skinScroll = 0f; skinVel = 0f } }
+            Scr.ACHIEV -> scr = Scr.SETTINGS
             Scr.EDITOR -> edBack()
             Scr.MP_HOST, Scr.MP_JOIN -> {
                 leaveMp()
@@ -748,7 +777,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     }
 
     private fun activate(id: String) {
-        if (id == "rdl_bg") return // fondo de la ventana de borrar: solo bloquea los toques
+        if (id == "rdl_bg" || id == "gift_bg") return // fondo de las ventanas: solo bloquea los toques
         audio.play(Sfx.CLICK)
         when {
             id == "edit" -> if (BuildConfig.DEV) {
@@ -797,6 +826,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             id == "skins" -> {
                 scr = Scr.SKINS
                 skinTab = if (Skins.isAnim(effSkin())) 1 else 0
+                if (Skins.premium(effSkin())) { skinScroll = 0f; skinVel = 0f; return }
                 val row = (effSkin() - (if (skinTab == 1) Skins.ANIM_FIRST else 0)) / 4
                 skinScroll = (row * 280f - 300f).coerceAtLeast(0f)
             }
@@ -814,6 +844,20 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
                 if (k in Skins.names.indices && skinOpen(k)) prefs.skin = k
             }
             id == "ttheme" -> scr = Scr.THEMES
+            // Tienda, logros y regalo diario
+            id == "shop" -> openShop(if (scr == Scr.HOME) Scr.HOME else Scr.SKINS, if (scr == Scr.SKINS && skinTab == 2) 1 else 0)
+            id == "stab0" || id == "stab1" -> if (shopTab != id.substring(4).toInt()) {
+                shopTab = id.substring(4).toInt()
+                shopSel = shopFirstSel()
+                skinScroll = 0f
+                skinVel = 0f
+            }
+            id.startsWith("sitem:") -> { val k = id.substring(6).toIntOrNull() ?: return; if (k in 0 until shopCount()) shopSel = k }
+            id == "sbuy" -> shopBuy()
+            id == "tlogros" -> { scr = Scr.ACHIEV; skinScroll = 0f; skinVel = 0f }
+            id == "gift" -> { giftDlg = 1; giftDlgT = time }
+            id == "gift_take" -> claimGift()
+            id == "gift_close" -> giftDlg = 0
             id.startsWith("theme:") -> {
                 val k = id.substring(6).toIntOrNull() ?: return
                 if (k in 0 until Themes.COUNT) prefs.theme = k
@@ -990,7 +1034,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
                 if (scr == Scr.PLAY) moveSlide(e)
                 if (dragSlider != null) setSlider(x)
                 val dtm = (e.eventTime - lastMoveT) / 1000f
-                if (scr == Scr.SKINS || scr == Scr.TERMS) {
+                if (scr == Scr.SKINS || scr == Scr.TERMS || scr == Scr.SHOP || scr == Scr.ACHIEV) {
                     if (!dragged && abs(y - downY) > 22f) {
                         dragged = true
                         pressedId = null
@@ -1044,7 +1088,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
                 if (dragSlider != null) {
                     dragSlider = null
                     audio.play(Sfx.CLICK)
-                } else if ((scr == Scr.SKINS || scr == Scr.TERMS) && dragged) {
+                } else if ((scr == Scr.SKINS || scr == Scr.TERMS || scr == Scr.SHOP || scr == Scr.ACHIEV) && dragged) {
                     // era un deslizamiento, no un toque: sigue con inercia (ver update)
                     if (abs(skinVel) < 120f) skinVel = 0f
                 } else if (scr == Scr.EDITOR && (dragged || (id == null && edDrag in 1..2) || (id == null && edDrag == 4))) {
@@ -1153,7 +1197,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             levelOff *= exp(-12f * dt)
             if (abs(levelOff) < 0.5f) levelOff = 0f
         }
-        val touchingSkins = touching && (scr == Scr.SKINS || scr == Scr.TERMS) && dragged
+        val touchingSkins = touching && (scr == Scr.SKINS || scr == Scr.TERMS || scr == Scr.SHOP || scr == Scr.ACHIEV) && dragged
         if (!touchingSkins) {
             if (skinScroll < 0f || skinScroll > skinMax) {
                 skinVel = 0f
@@ -1236,6 +1280,14 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         if (itr != null) {
             if (!introFreeze) itr.update(dt)
             if (itr.done()) endIntro() else return
+        }
+        if (scr != Scr.TERMS) {
+            achT += dt
+            if (achT > 0.5f) { achT = 0f; checkAch() }
+        }
+        if (scr == Scr.HOME && giftAuto) {
+            giftAuto = false
+            if (giftReady()) { giftDlg = 1; giftDlgT = time }
         }
         if (scr == Scr.ADV) {
             if (advUi.active) advUi.update(dt)
@@ -1387,12 +1439,17 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             parts.add(Part(sm.bx, sm.by, cos(a) * sp, sin(a) * sp - 300f, col, 8f + rnd.nextFloat() * 16f, life, life))
         }
         when (mode) {
-            Mode.LEVEL -> deaths++
+            Mode.LEVEL -> { deaths++; if (!edTesting) prefs.addStat("deaths") }
             Mode.ENDLESS -> {
                 if (sm.starCount > prefs.endlessBest) {
                     prefs.endlessBest = sm.starCount
                     newBest = true
                 }
+                // monedas: una por obstáculo superado, y 10 extra por un récord nuevo
+                runCoins = sm.starCount + (if (newBest && sm.starCount >= 5) 10 else 0)
+                prefs.earn(runCoins)
+                prefs.addStat("deaths")
+                prefs.addStat("runs")
             }
             Mode.MP -> {}
         }
@@ -1699,11 +1756,22 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         if (width == 0 || height == 0) return
         hits.clear()
         if (scr == Scr.ADV) {
+            PremiumDraw.pxPerUnit = height / AdvCfg.H
             if (advUi.active) {
                 try { advUi.draw(canvas, width, height) } catch (e: Exception) { Log.e("ColorFlow", "adv", e) }
             } else canvas.drawColor(Color.BLACK)
+            if (toasts.isNotEmpty()) {
+                // avisos de logros también en la Aventura (horizontal): mismo dibujo, a escala de la altura
+                val s2 = height / 1080f
+                canvas.save()
+                canvas.scale(s2, s2)
+                canvas.translate((width / s2 - Cfg.W) / 2f, 0f)
+                try { drawToast(canvas, 16f) } catch (e: Exception) { Log.e("ColorFlow", "toast", e) }
+                canvas.restore()
+            }
             return
         }
+        PremiumDraw.pxPerUnit = sc
         canvas.save()
         canvas.scale(sc, sc)
         try {
@@ -1753,6 +1821,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             drawPlayWorld(c)
             drawPlayUi(c)
             if (a < 1f) c.restore()
+            drawToast(c, topI + 190f)
             return
         }
         drawBackground(c, 0f)
@@ -1776,9 +1845,13 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             Scr.EDIT_HOME -> drawEditHome(c)
             Scr.ADV_MENU -> drawAdvMenu(c)
             Scr.TERMS -> drawTerms(c)
+            Scr.SHOP -> drawShop(c)
+            Scr.ACHIEV -> drawAchievements(c)
             else -> {}
         }
         if (a < 1f) c.restore()
+        if (scr == Scr.HOME && giftDlg != 0) drawGift(c)
+        drawToast(c, topI + 24f)
     }
 
     private fun drawBackground(c: Canvas, camY: Float) {
@@ -2107,6 +2180,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         }
 
         drawHomeFx(c, pal, prefs.theme)
+        coinPill(c, 880f, topI + 96f, true)
+        giftBubble(c, 120f, topI + 96f)
 
         val bob = sin(time * 1.6f) * 6f
         Gl.glow(c, 950f, vh - 260f + bob, 120f, pal[1], 70)
@@ -2483,7 +2558,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         // alturas en unidades de diseño; si la pantalla es baja se comprimen las filas
         val soundH = 20f + 2f * 190f + 112f
         val gameH = 20f + 4f * 112f
-        val dataH = 20f + (if (dev) 3f else 2f) * 112f
+        val dataH = 20f + (if (dev) 4f else 3f) * 112f
         val fixed = 3f * 64f + 2f * 28f
         val avail = vh - 110f - start
         val k = min(1f, (avail - fixed) / (soundH + gameH + dataH))
@@ -2551,6 +2626,11 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val h3 = dataH * k
         Gl.panel(c, 60f, y, 1020f, y + h3, 56f, 0.8f, pal[1])
         ry = y + 10f * k
+        label("Logros", ry + rh / 2f)
+        val nAch = java.lang.Long.bitCount(prefs.achMask)
+        button(c, "tlogros", "Ver  $nAch/${Logros.COUNT}", bx, ry + rh / 2f, bw, bh, gold, 40f)
+        Gl.trophy(c, bx - bw / 2f - 46f, ry + rh / 2f, 26f * k.coerceAtLeast(0.7f), gold)
+        ry += rh; sep(ry)
         label("Progreso", ry + rh / 2f)
         button(c, "treset", "Borrar progreso", bx, ry + rh / 2f, bw, bh, 0xFFFF4F6B.toInt(), 34f)
         ry += rh; sep(ry)
@@ -2572,7 +2652,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             button(c, "topen", if (prefs.allOpen) "Todos abiertos" else "Abrir todos", bx, ry + rh / 2f, bw, bh, 0, 40f)
         }
 
-        Gl.text(c, "Color Flow  ·  v2", 540f, vh - 60f, 34f, Gl.regular, Gl.white(120))
+        // número de la versión instalada: sirve para saber si el botón "Actualización" encontró una más nueva
+        Gl.text(c, "Color Flow  ·  v$appVersion", 540f, vh - 60f, 34f, Gl.regular, Gl.white(120), 0f, null, 0, Paint.Align.CENTER, false)
         if (resetDlg != 0) drawResetDlg(c)
     }
 
@@ -2615,6 +2696,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         items.add("Los mundos salvados de la Aventura")
         items.add("Las partidas guardadas de la Aventura")
         items.add("Las apariencias que se abren con estrellas o récord")
+        items.add("Las monedas, los logros y lo comprado en la Tienda")
         if (BuildConfig.DEV && !storeLook) items.add("«Abrir todos» (desarrollador)")
         val ph = when (resetDlg) { 1 -> 520f + items.size * 74f + 330f; 2 -> 900f; else -> 700f }
         val cy = vh / 2f
@@ -3845,7 +3927,9 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         Trails.draw(c, effTrail(), trail, col, Worlds.colors[world], Cfg.BALL_R, time)
     }
 
-    private fun trailOpen(k: Int): Boolean = prefs.allOpen || prefs.totalStars() >= Trails.need[k]
+    private fun trailOpen(k: Int): Boolean =
+        if (Trails.premium(k)) prefs.allOpen || prefs.ownsTrail(k - Trails.PREMIUM_FIRST)
+        else prefs.allOpen || prefs.totalStars() >= Trails.need[k]
 
     private fun effTrail(): Int {
         val k = prefs.trail
@@ -3883,6 +3967,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
 
     private fun skinOpen(k: Int): Boolean {
         if (prefs.allOpen) return true
+        if (Skins.premium(k)) return prefs.ownsSphere(k - Skins.PREMIUM_FIRST)
         if (Skins.special(k)) return prefs.endlessBest >= Skins.endNeed(k) || prefs.worldsDone() >= Skins.worldNeed(k)
         if (Skins.stellar(k)) return prefs.totalStars() >= Skins.need[k] || advSaved() >= Skins.advNeed(k)
         return prefs.totalStars() >= Skins.need[k]
@@ -3969,7 +4054,18 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     private val ORB_STOPS = floatArrayOf(0f, 0.45f, 1f)
     private val BUBBLE_STOPS = floatArrayOf(0f, 0.65f, 1f)
 
+    /** Tamaño máximo (píxeles) y cuadros por segundo de las esferas de la Tienda en el dibujo actual. */
+    private var premCap = 128
+    private var premFps = 30f
+
     private fun drawBallAt(c: Canvas, x: Float, y: Float, r: Float, col: Int, skin: Int, tm: Float, glow: Boolean) {
+        if (Skins.premium(skin)) {
+            val k = skin - Skins.PREMIUM_FIRST
+            if (glow) Gl.glow(c, x, y, r * 2.6f, col, 80)
+            PremiumDraw.draw(c, x, y, r, col, k, tm, premCap, premFps)
+            premiumSparks(c, x, y, r, Premium.tier[k], tm, col)
+            return
+        }
         if (glow) Gl.glow(c, x, y, r * 2.8f, col, 110)
         Gl.shadedCircle(
             c, x, y, r, 2, col, -0.35f, -0.4f, 1.5f,
@@ -5373,6 +5469,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val top = topI
         iconButton(c, "back", 110f, top + 110f, 56f) { cc, x, y, r -> iconChevron(cc, x, y, r, -1) }
         title(c, "APARIENCIAS", top + 130f, 56f)
+        shopBubble(c, 966f, top + 104f)
         val k0 = effSkin()
         val colNow = pal[(time * 0.8f).toInt() % 4]
         Gl.glow(c, 540f, top + 340f, 300f, colNow, 80)
@@ -5398,7 +5495,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val viewBot = vh - 150f
         val tr = skinTab == 2
         val first = if (skinTab == 1) Skins.ANIM_FIRST else 0
-        val count = if (tr) Trails.COUNT else if (skinTab == 1) Skins.names.size - Skins.ANIM_FIRST else Skins.ANIM_FIRST
+        val count = if (tr) Trails.PREMIUM_FIRST else if (skinTab == 1) Skins.PREMIUM_FIRST - Skins.ANIM_FIRST else Skins.ANIM_FIRST
         val rows = (count + 3) / 4
         skinMax = max(0f, rows * (h + 18f) - 18f - (viewBot - gy))
         skinScroll = skinScroll.coerceIn(-170f, skinMax + 170f)
@@ -5490,6 +5587,744 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         )
     }
 
+
+    // ======================================================================
+    // Tienda, monedas, logros y regalo diario
+    // ======================================================================
+
+    private var shopTab = 0          // 0 esferas, 1 estelas
+    private var shopSel = 0          // la elegida (índice dentro de la pestaña)
+    private var shopFrom = Scr.SKINS
+    private var buyFxT = -10f        // momento de la última compra (celebración)
+    private var buyFxTier = 0
+    private var needT = -10f         // "te faltan monedas": momento del aviso
+    private var runCoins = 0         // monedas de la última partida del modo infinito
+    private class Toast(val title: String, val sub: String, val coins: Int, val kind: Int)
+    private val toasts = ArrayList<Toast>()
+    private var toastT0 = 0f
+    private var toastSfx = false
+    private val TOAST_DUR = 3.4f
+    private var achT = 0f
+    private var giftDlg = 0          // 0 cerrada, 1 abierta, 2 recién recogido
+    private var giftDlgT = 0f
+    private var giftAuto = true      // se abre sola al llegar al menú si hay regalo
+    private var giftGot = 0
+    private val GIFT = intArrayOf(20, 30, 40, 50, 60, 80, 150)
+
+    private fun shopCount(): Int = if (shopTab == 0) Premium.COUNT else Trails.price.size
+    private fun shopPrice(i: Int): Int = if (shopTab == 0) Premium.price[i] else Trails.price[i]
+    private fun shopOwned(i: Int): Boolean = if (shopTab == 0) prefs.ownsSphere(i) else prefs.ownsTrail(i)
+    private fun shopInUse(i: Int): Boolean =
+        if (shopTab == 0) effSkin() == Skins.PREMIUM_FIRST + i else effTrail() == Trails.PREMIUM_FIRST + i
+    private fun shopTier(i: Int): Int = if (shopTab == 0) Premium.tier[i] else min(3, i * 4 / Trails.price.size)
+    private fun shopName(i: Int): String = if (shopTab == 0) Premium.names[i] else Trails.names[Trails.PREMIUM_FIRST + i]
+
+    /** Al abrir: la que se está usando, o la más barata que todavía no se tiene. */
+    private fun shopFirstSel(): Int {
+        val curK = if (shopTab == 0) effSkin() - Skins.PREMIUM_FIRST else effTrail() - Trails.PREMIUM_FIRST
+        if (curK in 0 until shopCount()) return curK
+        for (i in 0 until shopCount()) if (!shopOwned(i)) return i
+        return 0
+    }
+
+    private fun openShop(from: Scr, tab: Int) {
+        shopFrom = from
+        shopTab = tab
+        shopSel = shopFirstSel()
+        skinScroll = ((shopSel / 3) * 360f - 200f).coerceAtLeast(0f)
+        skinVel = 0f
+        scr = Scr.SHOP
+    }
+
+    private fun shopBuy() {
+        val i = shopSel
+        if (i !in 0 until shopCount()) return
+        if (shopOwned(i)) {
+            if (shopTab == 0) prefs.skin = Skins.PREMIUM_FIRST + i else prefs.trail = Trails.PREMIUM_FIRST + i
+            return
+        }
+        val price = shopPrice(i)
+        if (prefs.coins < price) {
+            needT = time
+            audio.play(Sfx.BACK)
+            haptic(HapticFeedbackConstants.VIRTUAL_KEY)
+            return
+        }
+        prefs.coins = prefs.coins - price
+        if (shopTab == 0) {
+            prefs.ownSpheres = prefs.ownSpheres or (1L shl i)
+            prefs.skin = Skins.PREMIUM_FIRST + i
+        } else {
+            prefs.ownTrails = prefs.ownTrails or (1 shl i)
+            prefs.trail = Trails.PREMIUM_FIRST + i
+        }
+        prefs.addStat("buys")
+        buyFxT = time
+        buyFxTier = shopTier(i)
+        audio.play(Sfx.WIN)
+        haptic(HapticFeedbackConstants.LONG_PRESS)
+        checkAch()
+    }
+
+    private fun affordable(): Boolean {
+        val c0 = prefs.coins
+        for (i in 0 until Premium.COUNT) if (!prefs.ownsSphere(i) && Premium.price[i] <= c0) return true
+        for (i in Trails.price.indices) if (!prefs.ownsTrail(i) && Trails.price[i] <= c0) return true
+        return false
+    }
+
+    /** "Faltan N monedas para «X»": la esfera más barata que todavía no se tiene (ya traducido). */
+    private fun nextGoal(): String? {
+        for (i in 0 until Premium.COUNT) if (!prefs.ownsSphere(i)) {
+            val left = Premium.price[i] - prefs.coins
+            return if (left > 0) String.format(I18n.t("Faltan %1\$d monedas para «%2\$s»"), left, I18n.t(Premium.names[i]))
+            else String.format(I18n.t("¡Ya puedes comprar «%s» en la Tienda!"), I18n.t(Premium.names[i]))
+        }
+        return null
+    }
+
+    // ---------------- logros ----------------
+    private fun achValue(st: Int): Int = when (st) {
+        Logros.S_LEVELS -> prefs.levelsWith(1)
+        Logros.S_STARS -> prefs.totalStars()
+        Logros.S_PERFECT -> prefs.levelsWith(3)
+        Logros.S_WORLDS -> prefs.worldsDone()
+        Logros.S_DEATHS -> prefs.stat("deaths")
+        Logros.S_ENDLESS -> max(prefs.endlessBest, if (scr == Scr.PLAY && mode == Mode.ENDLESS) (sim?.starCount ?: 0) else 0)
+        Logros.S_RUNS -> prefs.stat("runs")
+        Logros.S_KILLS -> prefs.stat("kills")
+        Logros.S_BOSSES -> prefs.stat("bosses")
+        Logros.S_SAVED -> advSaved()
+        Logros.S_COINS -> prefs.stat("coins")
+        Logros.S_BUYS -> prefs.stat("buys")
+        Logros.S_SPHERES -> java.lang.Long.bitCount(prefs.ownSpheres)
+        Logros.S_MYTHIC -> { var n = 0; for (i in 0 until Premium.COUNT) if (Premium.tier[i] == 3 && prefs.ownsSphere(i)) n++; n }
+        Logros.S_TRAILS -> Integer.bitCount(prefs.ownTrails)
+        Logros.S_STREAK -> prefs.stat("streak")
+        else -> java.lang.Long.bitCount(prefs.achMask and ((1L shl (Logros.COUNT - 1)) - 1))
+    }
+
+    private fun achDone(i: Int): Boolean = (prefs.achMask shr i) and 1L == 1L
+
+    /** Revisa los logros: los nuevos entregan sus monedas y muestran un aviso. */
+    private fun checkAch() {
+        var mask = prefs.achMask
+        val got = ArrayList<Int>()
+        for (loop in 0 until 4) {
+            var any = false
+            for (i in 0 until Logros.COUNT) {
+                if ((mask shr i) and 1L == 1L) continue
+                val d = Logros.list[i]
+                if (achValue(d.stat) >= d.goal) {
+                    mask = mask or (1L shl i)
+                    prefs.achMask = mask
+                    prefs.earn(d.reward)
+                    got.add(i)
+                    any = true
+                }
+            }
+            if (!any) break
+        }
+        if (got.isEmpty()) return
+        if (got.size > 3) {
+            var sum = 0
+            for (i in got) sum += Logros.list[i].reward
+            pushToast(Toast("¡${got.size} logros desbloqueados!", "Míralos en Ajustes", sum, 0))
+        } else for (i in got) pushToast(Toast("¡Logro desbloqueado!", Logros.list[i].name, Logros.list[i].reward, 0))
+    }
+
+    private fun pushToast(t: Toast) {
+        if (toasts.isEmpty()) { toastT0 = time; toastSfx = false }
+        if (toasts.size < 6) toasts.add(t)
+    }
+
+    /** Aviso de logro: baja desde arriba con un destello, el trofeo y las monedas ganadas. */
+    private fun drawToast(c: Canvas, top: Float) {
+        if (toasts.isEmpty()) return
+        var age = time - toastT0
+        if (age > TOAST_DUR) {
+            toasts.removeAt(0)
+            toastT0 = time
+            toastSfx = false
+            if (toasts.isEmpty()) return
+            age = 0f
+        }
+        val tt = toasts[0]
+        if (!toastSfx) {
+            toastSfx = true
+            audio.play(Sfx.WIN)
+            haptic(HapticFeedbackConstants.VIRTUAL_KEY)
+        }
+        val inA = spring((age / 0.55f).coerceIn(0f, 1f))
+        val outA = easeOut(((age - (TOAST_DUR - 0.4f)) / 0.4f).coerceIn(0f, 1f))
+        val w = 880f
+        val h = 172f
+        val y = top + (inA - 1f) * (h + 90f) - outA * (h + 120f)
+        val l = 540f - w / 2f
+        val r = 540f + w / 2f
+        val b = y + h
+        Gl.glow(c, 540f, y + h / 2f, 480f, gold, 60)
+        glassWindow(c, l, y, r, b, h / 2f, 1.2f, gold)
+        var pp = Gl.p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = 3f
+        pp.color = Gl.alpha(gold, 200)
+        Gl.rect.set(l, y, r, b)
+        c.drawRoundRect(Gl.rect, h / 2f, h / 2f, pp)
+        // destello que cruza el panel
+        val sw = (age - 0.35f) / 0.75f
+        if (sw in 0f..1f) {
+            c.save()
+            Gl.rect.set(l + h * 0.3f, y + 4f, r - h * 0.3f, b - 4f)
+            c.clipRect(Gl.rect)
+            val sx = l + (w + 240f) * sw - 120f
+            Gl.path.reset()
+            Gl.path.moveTo(sx, y)
+            Gl.path.lineTo(sx + 70f, y)
+            Gl.path.lineTo(sx - 20f, b)
+            Gl.path.lineTo(sx - 90f, b)
+            Gl.path.close()
+            pp = Gl.p()
+            pp.color = Gl.white(80)
+            c.drawPath(Gl.path, pp)
+            c.restore()
+        }
+        // ícono con rayos que giran
+        val ix = l + 92f
+        val iy = y + h / 2f
+        for (i in 0 until 12) {
+            val a = time * 0.9f + i * 0.5236f
+            Gl.line(c, ix + cos(a) * 66f, iy + sin(a) * 66f, ix + cos(a) * 88f, iy + sin(a) * 88f, 5f, Gl.alpha(gold, 90))
+        }
+        Gl.shadedCircle(c, ix, iy, 62f, 8, gold, -0.35f, -0.4f, 1.5f,
+            intArrayOf(0xFFFFF4C0.toInt(), 0xFFFFB020.toInt(), 0xFF8A4A00.toInt()), BALL_STOPS)
+        Gl.trophy(c, ix, iy + 2f, 36f, 0xFFFFF6D8.toInt())
+        if (age < 1.2f) {
+            val fa = 1f - age / 1.2f
+            for (i in 0 until 12) {
+                val a = i * 0.5236f + 0.2f
+                val dd = 70f + age * 260f
+                pp = Gl.p()
+                pp.color = Gl.alpha(if (i % 2 == 0) gold else Color.WHITE, (255 * fa).toInt())
+                c.drawCircle(ix + cos(a) * dd, iy + sin(a) * dd * 0.6f, 6f * fa + 2f, pp)
+            }
+        }
+        // textos y recompensa
+        val tx = l + 186f
+        val ct = if (tt.coins > 0) "+${tt.coins}" else ""
+        val cw = if (tt.coins > 0) Gl.textWidth(ct, 46f, Gl.medium, 0f, false) + 76f else 0f
+        Gl.textFit(c, tt.title, tx, y + 66f, 32f, r - tx - cw - 40f, Gl.medium, 0xFFFFD86A.toInt(), 0.04f, Paint.Align.LEFT)
+        Gl.textFit(c, tt.sub, tx, y + 124f, 46f, r - tx - cw - 40f, Gl.medium, Gl.white(250), 0f, Paint.Align.LEFT)
+        if (tt.coins > 0) {
+            val cx2 = r - 44f - cw + 76f
+            val pop = 1f + 0.25f * sin((age * 3f).coerceAtMost(3.1416f))
+            Gl.coin(c, cx2 - 38f, y + h / 2f, 28f * pop, time * 2f)
+            Gl.text(c, ct, cx2, y + h / 2f + 16f, 46f, Gl.medium, 0xFFFFE9A8.toInt(), 0f, null, 0, Paint.Align.LEFT, false)
+        }
+    }
+
+    // ---------------- piezas de interfaz ----------------
+    /** Contador de monedas. tappable: abre la Tienda. */
+    private fun coinPill(c: Canvas, cx: Float, cy: Float, tappable: Boolean) {
+        val txt = prefs.coins.toString()
+        val tw = Gl.textWidth(txt, 44f, Gl.medium, 0f, false)
+        val w = max(170f, tw + 110f)
+        val pressed = tappable && pressedId == "shop"
+        val s = if (pressed) 0.95f else 1f
+        Gl.glow(c, cx, cy, w * 0.7f, gold, 40)
+        Gl.panel(c, cx - w / 2f * s, cy - 42f * s, cx + w / 2f * s, cy + 42f * s, 42f * s, if (pressed) 1.25f else 1f, gold)
+        Gl.coin(c, cx - w / 2f + 48f, cy, 26f, time)
+        Gl.text(c, txt, cx - w / 2f + 86f, cy + 16f, 44f, Gl.medium, 0xFFFFE9A8.toInt(), 0f, null, 0, Paint.Align.LEFT, false)
+        if (tappable) hits.add(Hit("shop", cx - w / 2f - 10f, cy - 52f, cx + w / 2f + 10f, cy + 52f))
+    }
+
+    private fun iconShop(c: Canvas, x: Float, y: Float, r: Float) {
+        val k = r / 54f
+        Gl.arc(c, x, y - 8f * k, 13f * k, 180f, 180f, 6f * k, Gl.white(240))
+        Gl.path.reset()
+        Gl.path.moveTo(x - 24f * k, y - 8f * k)
+        Gl.path.lineTo(x + 24f * k, y - 8f * k)
+        Gl.path.lineTo(x + 28f * k, y + 30f * k)
+        Gl.path.lineTo(x - 28f * k, y + 30f * k)
+        Gl.path.close()
+        val pp = Gl.p()
+        pp.color = Gl.white(240)
+        pp.pathEffect = android.graphics.CornerPathEffect(6f * k)
+        c.drawPath(Gl.path, pp)
+        Gl.coin(c, x, y + 11f * k, 12f * k, time)
+    }
+
+    /** Burbuja "Tienda" dentro de Apariencias (como las de Ajustes y Apariencias del menú). */
+    private fun shopBubble(c: Canvas, cx: Float, cy: Float) {
+        val y = cy + sin(time * 2f) * 5f
+        Gl.glow(c, cx, y, 125f, gold, (55 + 25 * sin(time * 3f)).toInt())
+        iconButton(c, "shop", cx, y, 58f) { cc, x, yy, r -> iconShop(cc, x, yy, r) }
+        Gl.text(c, "Tienda", cx, y + 96f, 30f, Gl.medium, 0xFFFFE08A.toInt())
+        if (affordable()) badge(c, cx + 44f, y - 44f)
+    }
+
+    /** Puntito rojo con "!" (hay algo nuevo). */
+    private fun badge(c: Canvas, x: Float, y: Float) {
+        val s = 1f + 0.12f * sin(time * 6f)
+        Gl.glow(c, x, y, 40f * s, 0xFFFF3050.toInt(), 90)
+        val pp = Gl.p()
+        pp.color = 0xFFFF3050.toInt()
+        c.drawCircle(x, y, 19f * s, pp)
+        Gl.text(c, "!", x, y + 10f, 28f, Gl.medium, Color.WHITE, 0f, null, 0, Paint.Align.CENTER, false)
+    }
+
+    /** Destellos que orbitan las esferas de la Tienda (más según la rareza): estrellitas blancas que brillan con el
+     *  color de juego, para no confundir el color de la bola. */
+    private fun premiumSparks(c: Canvas, x: Float, y: Float, r: Float, tier: Int, tm: Float, col: Int) {
+        val n = 1 + tier
+        for (i in 0 until n) {
+            val a = tm * (0.9f + 0.17f * i) + i * 6.2832f / n
+            val rr = r * (1.25f + 0.1f * sin(tm * 2f + i))
+            val px = x + cos(a) * rr
+            val py = y + sin(a) * rr * 0.45f - r * 0.12f
+            val front = sin(a) > 0f
+            val tw = 0.5f + 0.5f * sin(tm * 6f + i * 2f)
+            val s = r * (0.04f + 0.04f * tw) * (if (front) 1f else 0.6f)
+            if (s < 0.6f) continue
+            Gl.glow(c, px, py, s * 3.6f, col, if (front) 110 else 50)
+            Gl.path.reset()
+            Gl.path.moveTo(px, py - s * 2.2f)
+            Gl.path.quadTo(px, py, px + s * 2.2f, py)
+            Gl.path.quadTo(px, py, px, py + s * 2.2f)
+            Gl.path.quadTo(px, py, px - s * 2.2f, py)
+            Gl.path.quadTo(px, py, px, py - s * 2.2f)
+            Gl.path.close()
+            val pp = Gl.p()
+            pp.color = Gl.white(if (front) 235 else 120)
+            c.drawPath(Gl.path, pp)
+        }
+    }
+
+    /** Rayos de luz que giran detrás de lo legendario y lo mítico. */
+    private fun tierRays(c: Canvas, x: Float, y: Float, rad: Float, tier: Int, col: Int) {
+        if (tier < 2) return
+        val n = if (tier == 3) 14 else 10
+        val pp = Gl.p()
+        for (i in 0 until n) {
+            val a0 = time * 0.25f + i * 6.2832f / n
+            Gl.path.reset()
+            Gl.path.moveTo(x, y)
+            Gl.path.lineTo(x + cos(a0 - 0.08f) * rad, y + sin(a0 - 0.08f) * rad)
+            Gl.path.lineTo(x + cos(a0 + 0.08f) * rad, y + sin(a0 + 0.08f) * rad)
+            Gl.path.close()
+            pp.color = Gl.alpha(if (tier == 3) Color.HSVToColor(floatArrayOf(((i * 360f / n) + time * 40f) % 360f, 0.5f, 1f)) else col, 34)
+            c.drawPath(Gl.path, pp)
+        }
+    }
+
+    private fun tierLabel(t: Int): String = when (t) { 0 -> "RARA"; 1 -> "ÉPICA"; 2 -> "LEGENDARIA"; else -> "MÍTICA" }
+
+    // ---------------- pantalla de la Tienda ----------------
+    private fun drawShop(c: Canvas) {
+        val pal = cur()
+        val top = topI
+        iconButton(c, "back", 110f, top + 110f, 56f) { cc, x, y, r -> iconChevron(cc, x, y, r, -1) }
+        title(c, "TIENDA", top + 130f, 60f)
+        coinPill(c, 900f, top + 110f, false)
+        val n = shopCount()
+        shopSel = shopSel.coerceIn(0, n - 1)
+        val sel = shopSel
+        val tier = shopTier(sel)
+        val tc = Premium.tierColor[tier]
+        val colNow = pal[(time * 0.8f).toInt() % 4]
+
+        // vitrina: la elegida en grande
+        val py = top + 395f
+        tierRays(c, 540f, py, 380f, tier, tc)
+        Gl.glow(c, 540f, py, 330f, tc, 75)
+        premCap = 256; premFps = 30f
+        if (shopTab == 0) {
+            drawBallAt(c, 540f, py + sin(time * 1.6f) * 8f, 118f, colNow, Skins.PREMIUM_FIRST + sel, time, true)
+        } else {
+            drawTrailDemo(c, Trails.PREMIUM_FIRST + sel, 150f, 930f, py, 95f, 46f, colNow, pal, time, 46f)
+        }
+        Gl.textFit(c, shopName(sel), 540f, top + 640f, 58f, 900f, Gl.light, Gl.white(248), 0.06f)
+        val tl = tierLabel(tier)
+        Gl.text(c, tl, 540f, top + 690f, 30f, Gl.medium, tc, 0.32f)
+        val tlw = Gl.textWidth(tl, 30f, Gl.medium, 0.32f)
+        for (sg in intArrayOf(-1, 1)) for (j in 0..tier) {
+            val dx = 540f + sg * (tlw / 2f + 30f + j * 26f)
+            starShape(c, dx, top + 680f, 11f, 5f, 0f, tc, Gl.white(160))
+        }
+        // botón de compra / usar
+        val owned = shopOwned(sel)
+        val inUse = owned && shopInUse(sel)
+        val price = shopPrice(sel)
+        val can = prefs.coins >= price
+        val label = if (inUse) "En uso" else if (owned) "Usar" else if (can) "Comprar por $price" else "Te faltan ${price - prefs.coins}"
+        val ne = time - needT
+        val dx = if (ne < 0.45f) sin(ne * 60f) * 16f * (1f - ne / 0.45f) else 0f
+        if (!owned && can) Gl.glow(c, 540f, top + 790f, 420f, gold, (50 + 30 * sin(time * 4f)).toInt())
+        button(c, "sbuy", label, 540f + dx, top + 790f, 640f, 118f,
+            if (inUse) 0 else if (owned) pal[0] else if (can) 0xFFFFB020.toInt() else 0, 46f, !inUse)
+        if (!owned) {
+            val lw = Gl.textWidth(label, 46f, Gl.medium)
+            Gl.coin(c, 540f + dx - min(lw, 580f) / 2f - 40f, top + 790f, 24f, time)
+        }
+        if (ne < 3f) Gl.textFit(c, "Gana monedas en el modo infinito, la Aventura y con logros", 540f, top + 884f, 30f, 960f, Gl.regular, 0xFFFFE08A.toInt())
+
+        // pestañas
+        val tabY = top + 960f
+        button(c, "stab0", "Esferas", 330f, tabY, 400f, 84f, if (shopTab == 0) pal[0] else 0, 38f)
+        button(c, "stab1", "Estelas", 750f, tabY, 400f, 84f, if (shopTab == 1) pal[1] else 0, 38f)
+
+        // cuadrícula
+        val cwid = 316f
+        val ch = 350f
+        val gap = 22f
+        val gy = tabY + 66f
+        val viewBot = vh - 24f
+        val rows = (n + 2) / 3
+        skinMax = max(0f, rows * (ch + gap) - gap - (viewBot - gy))
+        skinScroll = skinScroll.coerceIn(-170f, skinMax + 170f)
+        c.save()
+        c.clipRect(0f, gy - 12f, Cfg.W, viewBot)
+        premCap = 144; premFps = 20f
+        for (j in 0 until n) {
+            val cx = 190f + (j % 3) * 350f
+            val cy = gy + ch / 2f + (j / 3) * (ch + gap) - skinScroll
+            if (cy + ch / 2f < gy - 12f || cy - ch / 2f > viewBot) continue
+            val t2 = shopTier(j)
+            val tc2 = Premium.tierColor[t2]
+            val isSel = j == sel
+            val own = shopOwned(j)
+            val use = own && shopInUse(j)
+            val id = "sitem:$j"
+            val s = if (pressedId == id) 0.96f else 1f
+            val l = cx - cwid / 2f * s
+            val t = cy - ch / 2f * s
+            val r = cx + cwid / 2f * s
+            val b = cy + ch / 2f * s
+            if (isSel) Gl.glow(c, cx, cy, 260f, tc2, 60)
+            Gl.panel(c, l, t, r, b, 46f, if (isSel) 1.35f else 0.85f, tc2)
+            var pp = Gl.p()
+            pp.style = Paint.Style.STROKE
+            pp.strokeWidth = if (isSel) 6f else 3f
+            pp.color = if (t2 == 3) Color.HSVToColor(floatArrayOf((time * 90f + j * 40f) % 360f, 0.55f, 1f)) else Gl.alpha(tc2, if (isSel) 255 else 150)
+            Gl.rect.set(l, t, r, b)
+            c.drawRoundRect(Gl.rect, 46f, 46f, pp)
+            Gl.text(c, tierLabel(t2), cx, t + 44f, 22f, Gl.medium, tc2, 0.25f)
+            val bc = pal[j % 4] // color fijo por casilla: cada imagen se reutiliza (no se crea otra al cambiar el color)
+            if (shopTab == 0) {
+                drawBallAt(c, cx, cy - 22f, 74f, bc, Skins.PREMIUM_FIRST + j, time, false)
+            } else {
+                c.save()
+                c.clipRect(l + 6f, t + 54f, r - 6f, b - 84f)
+                drawTrailDemo(c, Trails.PREMIUM_FIRST + j, cx - 128f, cx + 128f, cy - 24f, 40f, 32f, bc, pal, time, 25f)
+                c.restore()
+            }
+            Gl.textFit(c, shopName(j), cx, cy + 92f, 32f, cwid - 30f, Gl.medium, Gl.white(245))
+            if (use) {
+                Gl.text(c, "En uso", cx, cy + 142f, 30f, Gl.medium, 0xFF6CFFB0.toInt())
+            } else if (own) {
+                Gl.text(c, "Tuya", cx, cy + 142f, 30f, Gl.medium, Gl.white(220))
+            } else {
+                val ps = shopPrice(j).toString()
+                val pw = Gl.textWidth(ps, 34f, Gl.medium, 0f, false)
+                Gl.coin(c, cx - pw / 2f - 18f, cy + 131f, 17f, time + j)
+                Gl.text(c, ps, cx + 14f, cy + 143f, 34f, Gl.medium, if (prefs.coins >= shopPrice(j)) 0xFFFFD86A.toInt() else Gl.white(170), 0f, null, 0, Paint.Align.CENTER, false)
+            }
+            val ht = max(gy, cy - ch / 2f)
+            val hb = min(viewBot, cy + ch / 2f)
+            if (hb > ht) hits.add(Hit(id, cx - cwid / 2f, ht, cx + cwid / 2f, hb))
+        }
+        premCap = 128; premFps = 30f
+        c.restore()
+        if (skinMax > 0f) {
+            val trackH = viewBot - gy
+            val barH = max(60f, trackH * trackH / (trackH + skinMax))
+            val by0 = gy + (trackH - barH) * (skinScroll / skinMax).coerceIn(0f, 1f)
+            Gl.rect.set(Cfg.W - 10f, by0, Cfg.W - 4f, by0 + barH)
+            c.drawRoundRect(Gl.rect, 3f, 3f, pw(70))
+        }
+        // celebración de la compra
+        val bf = time - buyFxT
+        if (bf < 1.8f) {
+            val u = bf / 1.8f
+            val btc = Premium.tierColor[buyFxTier]
+            if (bf < 0.25f) dim(c, (120 * (1f - bf / 0.25f)).toInt())
+            for (k in 0 until 3) {
+                val uu = (u * 1.4f - k * 0.15f).coerceIn(0f, 1f)
+                if (uu <= 0f || uu >= 1f) continue
+                val pp = Gl.p()
+                pp.style = Paint.Style.STROKE
+                pp.strokeWidth = 18f * (1f - uu)
+                pp.color = Gl.alpha(if (k == 1) Color.WHITE else btc, (230 * (1f - uu)).toInt())
+                c.drawCircle(540f, py, 120f + uu * 520f, pp)
+            }
+            for (i in 0 until 24) {
+                val a = i * 0.2618f + 0.1f
+                val dd = 130f + easeOut(u) * 420f
+                val pp = Gl.p()
+                pp.color = Gl.alpha(if (i % 3 == 0) Color.WHITE else if (i % 3 == 1) btc else gold, (255 * (1f - u)).toInt())
+                c.drawCircle(540f + cos(a) * dd, py + sin(a) * dd * 0.8f + u * u * 160f, 9f * (1f - u) + 3f, pp)
+            }
+            val ta = (if (bf < 1.3f) 1f else (1.8f - bf) / 0.5f).coerceIn(0f, 1f)
+            val zz = 0.6f + 0.4f * spring((bf / 0.5f).coerceIn(0f, 1f))
+            c.save()
+            c.scale(zz, zz, 540f, top + 210f)
+            Gl.text(c, if (shopTab == 0) "¡NUEVA ESFERA!" else "¡NUEVA ESTELA!", 540f, top + 230f, 76f, Gl.medium, Gl.alpha(gold, (255 * ta).toInt()), 0.08f, null, btc)
+            c.restore()
+        }
+    }
+
+    // ---------------- pantalla de logros (desde Ajustes) ----------------
+    private fun drawAchievements(c: Canvas) {
+        val pal = cur()
+        val top = topI
+        iconButton(c, "back", 110f, top + 110f, 56f) { cc, x, y, r -> iconChevron(cc, x, y, r, -1) }
+        title(c, "LOGROS", top + 130f)
+        val done = java.lang.Long.bitCount(prefs.achMask)
+        val sy = top + 230f
+        Gl.glow(c, 170f, sy + 95f, 200f, gold, 60)
+        Gl.panel(c, 60f, sy, 1020f, sy + 190f, 60f, 1.15f, gold)
+        Gl.trophy(c, 165f, sy + 95f, 56f, gold)
+        Gl.text(c, "$done / ${Logros.COUNT}", 262f, sy + 98f, 66f, Gl.medium, Gl.white(250), 0f, null, 0, Paint.Align.LEFT, false)
+        Gl.textFit(c, "logros conseguidos", 262f, sy + 146f, 32f, 360f, Gl.regular, Gl.white(190), 0f, Paint.Align.LEFT)
+        val frac = done / Logros.COUNT.toFloat()
+        var pp = Gl.p()
+        pp.color = Gl.white(40)
+        Gl.rect.set(650f, sy + 84f, 970f, sy + 106f)
+        c.drawRoundRect(Gl.rect, 11f, 11f, pp)
+        pp = Gl.p()
+        pp.color = gold
+        Gl.rect.set(650f, sy + 84f, 650f + 320f * frac, sy + 106f)
+        c.drawRoundRect(Gl.rect, 11f, 11f, pp)
+        Gl.text(c, "${(frac * 100f).toInt()}%", 810f, sy + 66f, 30f, Gl.medium, 0xFFFFE08A.toInt(), 0f, null, 0, Paint.Align.CENTER, false)
+
+        // primero los conseguidos; después los demás, los más avanzados arriba
+        val order = (0 until Logros.COUNT).sortedWith(compareBy<Int>({ if (achDone(it)) 0 else 1 }, {
+            if (achDone(it)) it.toFloat() else -(achValue(Logros.list[it].stat).toFloat() / Logros.list[it].goal)
+        }))
+        val ch = 196f
+        val gap = 18f
+        val gy = sy + 222f
+        val viewBot = vh - 24f
+        skinMax = max(0f, Logros.COUNT * (ch + gap) - gap - (viewBot - gy))
+        skinScroll = skinScroll.coerceIn(-170f, skinMax + 170f)
+        c.save()
+        c.clipRect(0f, gy - 10f, Cfg.W, viewBot)
+        for ((j, i) in order.withIndex()) {
+            val cy = gy + ch / 2f + j * (ch + gap) - skinScroll
+            if (cy + ch / 2f < gy - 10f || cy - ch / 2f > viewBot) continue
+            val d = Logros.list[i]
+            val ok = achDone(i)
+            val v = min(d.goal, achValue(d.stat))
+            val f = if (ok) 1f else v / d.goal.toFloat()
+            Gl.panel(c, 60f, cy - ch / 2f, 1020f, cy + ch / 2f, 52f, if (ok) 1.2f else 0.75f, if (ok) gold else pal[1])
+            if (ok) {
+                Gl.glow(c, 150f, cy, 110f, gold, 60)
+                Gl.shadedCircle(c, 150f, cy, 58f, 8, gold, -0.35f, -0.4f, 1.5f,
+                    intArrayOf(0xFFFFF4C0.toInt(), 0xFFFFB020.toInt(), 0xFF8A4A00.toInt()), BALL_STOPS)
+                Gl.trophy(c, 150f, cy + 2f, 32f, 0xFFFFF6D8.toInt())
+            } else {
+                pp = Gl.p()
+                pp.color = Gl.white(28)
+                c.drawCircle(150f, cy, 58f, pp)
+                Gl.trophy(c, 150f, cy + 2f, 32f, Gl.white(90))
+            }
+            Gl.textFit(c, d.name, 236f, cy - 34f, 42f, 560f, Gl.medium, Gl.white(if (ok) 250 else 225), 0f, Paint.Align.LEFT)
+            Gl.textFit(c, d.desc, 236f, cy + 12f, 30f, 560f, Gl.regular, Gl.white(175), 0f, Paint.Align.LEFT)
+            pp = Gl.p()
+            pp.color = Gl.white(36)
+            Gl.rect.set(236f, cy + 44f, 690f, cy + 58f)
+            c.drawRoundRect(Gl.rect, 7f, 7f, pp)
+            pp = Gl.p()
+            pp.color = if (ok) gold else pal[0]
+            Gl.rect.set(236f, cy + 44f, 236f + 454f * f, cy + 58f)
+            c.drawRoundRect(Gl.rect, 7f, 7f, pp)
+            Gl.text(c, if (ok) "✓" else "$v/${d.goal}", 708f, cy + 62f, 28f, Gl.medium, if (ok) 0xFF6CFFB0.toInt() else Gl.white(180), 0f, null, 0, Paint.Align.LEFT, false)
+            Gl.coin(c, 900f, cy - 18f, 30f, time + i)
+            Gl.text(c, "+${d.reward}", 900f, cy + 54f, 36f, Gl.medium, if (ok) 0xFFFFE08A.toInt() else Gl.white(200), 0f, null, 0, Paint.Align.CENTER, false)
+        }
+        c.restore()
+        if (skinMax > 0f) {
+            val trackH = viewBot - gy
+            val barH = max(60f, trackH * trackH / (trackH + skinMax))
+            val by0 = gy + (trackH - barH) * (skinScroll / skinMax).coerceIn(0f, 1f)
+            Gl.rect.set(Cfg.W - 10f, by0, Cfg.W - 4f, by0 + barH)
+            c.drawRoundRect(Gl.rect, 3f, 3f, pw(70))
+        }
+    }
+
+    // ---------------- regalo diario ----------------
+    private fun today(): Int {
+        val now = System.currentTimeMillis()
+        return ((now + java.util.TimeZone.getDefault().getOffset(now)) / 86_400_000L).toInt()
+    }
+
+    private fun giftReady(): Boolean = prefs.giftDay != today()
+
+    /** Día de la racha (0..6) que se recoge hoy, o el que se recogió hoy. */
+    private fun giftIdx(): Int {
+        val d = today()
+        return when (prefs.giftDay) {
+            d -> ((prefs.giftStreak - 1) % 7 + 7) % 7
+            d - 1 -> prefs.giftStreak % 7
+            else -> 0
+        }
+    }
+
+    private fun claimGift() {
+        if (!giftReady()) return
+        val d = today()
+        val streak = if (prefs.giftDay == d - 1) prefs.giftStreak + 1 else 1
+        val amt = GIFT[(streak - 1) % 7]
+        prefs.giftDay = d
+        prefs.giftStreak = streak
+        prefs.maxStat("streak", streak)
+        prefs.earn(amt)
+        giftGot = amt
+        giftDlg = 2
+        giftDlgT = time
+        audio.play(Sfx.WIN)
+        haptic(HapticFeedbackConstants.LONG_PRESS)
+        checkAch()
+    }
+
+    /** Caja de regalo: open 0..1 levanta la tapa. */
+    private fun drawGiftBox(c: Canvas, x: Float, y: Float, s: Float, open: Float, tm: Float) {
+        val body = 0xFFFF4F8A.toInt()
+        val rib = 0xFFFFD24D.toInt()
+        var pp = Gl.p()
+        pp.color = Gl.darken(body, 0.7f)
+        Gl.rect.set(x - s * 0.62f, y - s * 0.1f, x + s * 0.62f, y + s * 0.72f)
+        c.drawRoundRect(Gl.rect, s * 0.1f, s * 0.1f, pp)
+        pp = Gl.p()
+        pp.color = body
+        Gl.rect.set(x - s * 0.6f, y - s * 0.12f, x + s * 0.6f, y + s * 0.66f)
+        c.drawRoundRect(Gl.rect, s * 0.1f, s * 0.1f, pp)
+        pp = Gl.p()
+        pp.color = rib
+        Gl.rect.set(x - s * 0.12f, y - s * 0.12f, x + s * 0.12f, y + s * 0.66f)
+        c.drawRect(Gl.rect, pp)
+        pp = Gl.p()
+        pp.color = Gl.white(70)
+        Gl.rect.set(x - s * 0.5f, y - s * 0.05f, x - s * 0.32f, y + s * 0.55f)
+        c.drawRoundRect(Gl.rect, s * 0.06f, s * 0.06f, pp)
+        // tapa
+        c.save()
+        c.translate(0f, -open * s * 0.9f)
+        c.rotate(-open * 24f, x + s * 0.7f, y - s * 0.12f)
+        pp = Gl.p()
+        pp.color = Gl.darken(body, 0.85f)
+        Gl.rect.set(x - s * 0.72f, y - s * 0.36f, x + s * 0.72f, y - s * 0.08f)
+        c.drawRoundRect(Gl.rect, s * 0.08f, s * 0.08f, pp)
+        pp = Gl.p()
+        pp.color = rib
+        Gl.rect.set(x - s * 0.12f, y - s * 0.36f, x + s * 0.12f, y - s * 0.08f)
+        c.drawRect(Gl.rect, pp)
+        // moño
+        val wob = sin(tm * 5f) * s * 0.03f
+        pp = Gl.p()
+        pp.color = rib
+        Gl.rect.set(x - s * 0.46f, y - s * 0.66f + wob, x - s * 0.04f, y - s * 0.34f)
+        c.drawOval(Gl.rect, pp)
+        Gl.rect.set(x + s * 0.04f, y - s * 0.66f - wob, x + s * 0.46f, y - s * 0.34f)
+        c.drawOval(Gl.rect, pp)
+        pp = Gl.p()
+        pp.color = Gl.darken(rib, 0.75f)
+        c.drawCircle(x, y - s * 0.4f, s * 0.1f, pp)
+        c.restore()
+    }
+
+    private fun giftBubble(c: Canvas, cx: Float, cy: Float) {
+        val ready = giftReady()
+        val y = cy - (if (ready) abs(sin(time * 3f)) * 10f else 0f)
+        if (ready) Gl.glow(c, cx, y, 130f, 0xFFFF5FA0.toInt(), (70 + 30 * sin(time * 4f)).toInt())
+        iconButton(c, "gift", cx, y, 58f) { cc, x, yy, r -> drawGiftBox(cc, x, yy + 6f, r * 0.62f, 0f, time) }
+        if (ready) {
+            badge(c, cx + 44f, y - 44f)
+        } else {
+            val now = System.currentTimeMillis()
+            val left = 86_400_000L - ((now + java.util.TimeZone.getDefault().getOffset(now)) % 86_400_000L)
+            val hrs = ceil(left / 3_600_000.0).toInt()
+            Gl.text(c, "$hrs h", cx, y + 94f, 28f, Gl.regular, Gl.white(160), 0f, null, 0, Paint.Align.CENTER, false)
+        }
+    }
+
+    /** Ventana del regalo diario: la caja se abre y entrega monedas; 7 días con premios cada vez mayores. */
+    private fun drawGift(c: Canvas) {
+        hits.clear()
+        hits.add(Hit("gift_bg", -Cfg.W, -vh, Cfg.W * 2f, vh * 2f))
+        val a = ((time - giftDlgT) / 0.3f).coerceIn(0f, 1f)
+        dim(c, if (giftDlg == 2) 170 else (170 * a).toInt())
+        val cy = vh / 2f
+        val ph = 1220f
+        val z = min(1f, (vh - 80f) / ph) * (if (giftDlg == 2) 1f else 0.86f + 0.14f * spring(a))
+        c.save()
+        c.scale(z, z, 540f, cy)
+        val t = cy - ph / 2f
+        val b = cy + ph / 2f
+        Gl.glow(c, 540f, cy, 700f, 0xFFFF5FA0.toInt(), 50)
+        val bk = Gl.p()
+        bk.color = Color.argb(150, 8, 10, 24)
+        Gl.rect.set(90f, t, 990f, b)
+        c.drawRoundRect(Gl.rect, 70f, 70f, bk)
+        glassWindow(c, 90f, t, 990f, b, 70f, 1.1f, gold)
+        Gl.text(c, "REGALO DIARIO", 540f, t + 112f, 60f, Gl.medium, Gl.white(250), 0.1f)
+        Gl.textFit(c, "Vuelve cada día: el premio crece", 540f, t + 172f, 34f, 820f, Gl.regular, Gl.white(200))
+        val opened = giftDlg == 2
+        val oa = if (opened) ((time - giftDlgT) / 0.6f).coerceIn(0f, 1f) else 0f
+        val gy = t + 420f
+        if (opened) {
+            tierRays(c, 540f, gy - 40f, 420f, 3, gold)
+            Gl.glow(c, 540f, gy - 60f, 320f, gold, (110 * oa).toInt())
+        }
+        val bounce = if (!opened && giftReady()) abs(sin(time * 3f)) * 18f else 0f
+        drawGiftBox(c, 540f, gy - bounce, 170f, easeOut(oa), time)
+        if (opened) {
+            val ra = easeOut(((time - giftDlgT - 0.2f) / 0.6f).coerceIn(0f, 1f))
+            val txt = "+$giftGot"
+            val tw = Gl.textWidth(txt, 90f, Gl.medium, 0f, false)
+            val yy = gy - 120f - ra * 90f
+            Gl.coin(c, 540f - tw / 2f - 36f, yy - 30f, 44f * ra + 1f, time * 2f)
+            Gl.text(c, txt, 540f + 30f, yy, 90f, Gl.medium, Gl.alpha(0xFFFFE08A.toInt(), (255 * ra).toInt()), 0f, null, gold, Paint.Align.CENTER, false)
+        }
+        // los 7 días
+        val idx = giftIdx()
+        val claimedToday = !giftReady()
+        val dy = t + 760f
+        for (d in 0 until 7) {
+            val cx = 540f + (d - 3) * 118f
+            val done = d < idx || (claimedToday && d == idx)
+            val now = d == idx
+            Gl.panel(c, cx - 52f, dy - 78f, cx + 52f, dy + 78f, 28f, if (now) 1.4f else 0.8f, if (now) gold else cur()[1])
+            if (now && !claimedToday) {
+                val pp = Gl.p()
+                pp.style = Paint.Style.STROKE
+                pp.strokeWidth = 4f
+                pp.color = Gl.alpha(gold, (160 + 90 * sin(time * 5f)).toInt())
+                Gl.rect.set(cx - 52f, dy - 78f, cx + 52f, dy + 78f)
+                c.drawRoundRect(Gl.rect, 28f, 28f, pp)
+            }
+            Gl.textFit(c, "Día ${d + 1}", cx, dy - 44f, 24f, 96f, Gl.medium, Gl.white(210))
+            Gl.coin(c, cx, dy + 6f, if (d == 6) 26f else 20f, time + d)
+            Gl.text(c, GIFT[d].toString(), cx, dy + 58f, 28f, Gl.medium, 0xFFFFE08A.toInt(), 0f, null, 0, Paint.Align.CENTER, false)
+            if (done) {
+                val pp = Gl.p()
+                pp.color = Color.argb(150, 10, 40, 24)
+                Gl.rect.set(cx - 52f, dy - 78f, cx + 52f, dy + 78f)
+                c.drawRoundRect(Gl.rect, 28f, 28f, pp)
+                Gl.line(c, cx - 20f, dy + 2f, cx - 4f, dy + 20f, 9f, 0xFF6CFFB0.toInt())
+                Gl.line(c, cx - 4f, dy + 20f, cx + 24f, dy - 16f, 9f, 0xFF6CFFB0.toInt())
+            }
+        }
+        val streak = if (prefs.giftDay >= today() - 1) prefs.giftStreak else 0
+        Gl.textFit(c, String.format(I18n.t("Racha: %d días seguidos"), streak), 540f, dy + 150f, 34f, 820f, Gl.regular, Gl.white(200), translate = false)
+        if (!opened && giftReady()) {
+            button(c, "gift_take", "Recoger", 540f, b - 150f, 640f, 126f, 0xFFFFB020.toInt(), 54f)
+        } else {
+            if (!opened) Gl.textFit(c, "Vuelve mañana por más", 540f, b - 260f, 36f, 820f, Gl.medium, 0xFFFFE08A.toInt())
+            button(c, "gift_close", if (opened) "¡Genial!" else "Cerrar", 540f, b - 150f, 640f, 126f, cur()[0], 50f)
+        }
+        c.restore()
+    }
 
     // ======================================================================
     // Editor de niveles (solo versión de desarrollador)
@@ -6454,7 +7289,14 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
                 Gl.rect.set(340f, cy + 96f, 340f + 400f * frac, cy + 110f)
                 c.drawRoundRect(Gl.rect, 7f, 7f, pp)
             }
-            Mode.ENDLESS -> chip(c, "Récord ${max(prefs.endlessBest, score)}", 930f, cy, 230f, 90f, 36f)
+            Mode.ENDLESS -> {
+                chip(c, "Récord ${max(prefs.endlessBest, score)}", 930f, cy, 230f, 90f, 36f)
+                if (score > 0) {
+                    val cw2 = Gl.textWidth("+$score", 38f, Gl.medium)
+                    Gl.coin(c, 540f - cw2 / 2f - 10f, cy + 112f, 20f, time)
+                    Gl.text(c, "+$score", 540f + 14f, cy + 125f, 38f, Gl.medium, 0xFFFFD86A.toInt())
+                }
+            }
             Mode.MP -> if (m != null) {
                 val left = if (m.phase == Match.Phase.RUN && !m.myDone) Cfg.ROUND_TIME - runTime else if (m.phase == Match.Phase.COUNTDOWN) Cfg.ROUND_TIME else 0f
                 chip(c, clock(left), 930f, cy, 230f, 90f, 44f)
@@ -6628,17 +7470,27 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         dim(c, 140)
         val cy = vh / 2f
         if (mode == Mode.ENDLESS) {
-            glassWindow(c, 110f, cy - 430f, 970f, cy + 430f, 70f, 1f, pal[0])
-            Gl.text(c, "FIN DEL JUEGO", 540f, cy - 300f, 54f, Gl.medium, Gl.white(225), 0.25f)
+            glassWindow(c, 110f, cy - 480f, 970f, cy + 480f, 70f, 1f, pal[0])
+            Gl.text(c, "FIN DEL JUEGO", 540f, cy - 350f, 54f, Gl.medium, Gl.white(225), 0.25f)
             val shader = LinearGradient(300f, 0f, 780f, 0f, intArrayOf(pal[0], pal[3], pal[1]), null, Shader.TileMode.CLAMP)
-            Gl.text(c, sm.starCount.toString(), 540f, cy - 70f, 240f, Gl.thin, Color.WHITE, 0f, shader)
+            Gl.text(c, sm.starCount.toString(), 540f, cy - 120f, 240f, Gl.thin, Color.WHITE, 0f, shader)
             if (newBest) {
-                Gl.text(c, "¡NUEVO RÉCORD!", 540f, cy + 20f, 54f, Gl.medium, gold, 0.12f)
+                Gl.text(c, "¡NUEVO RÉCORD!", 540f, cy - 30f, 54f, Gl.medium, gold, 0.12f)
             } else {
-                Gl.text(c, "Récord ${prefs.endlessBest}", 540f, cy + 20f, 50f, Gl.medium, Gl.white(200))
+                Gl.text(c, "Récord ${prefs.endlessBest}", 540f, cy - 30f, 50f, Gl.medium, Gl.white(200))
             }
-            button(c, "retry", "Jugar de nuevo", 540f, cy + 180f, 680f, 130f, pal[0], 52f)
-            button(c, "exit", "Menú", 540f, cy + 340f, 680f, 120f, 0, 48f)
+            // monedas ganadas (cuentan hacia arriba) y cuánto falta para la próxima esfera de la Tienda
+            val ca = ((time - ovT0 - 0.25f) / 0.9f).coerceIn(0f, 1f)
+            val shown = (runCoins * easeOut(ca)).toInt()
+            val ctxt = "+$shown monedas"
+            val cw2 = Gl.textWidth(ctxt, 48f, Gl.medium)
+            Gl.glow(c, 540f, cy + 45f, 260f, gold, (40 + 30 * sin(time * 4f)).toInt())
+            Gl.coin(c, 540f - cw2 / 2f - 22f, cy + 45f, 30f, time)
+            Gl.text(c, ctxt, 540f + 22f, cy + 62f, 48f, Gl.medium, 0xFFFFD86A.toInt())
+            val goal = nextGoal()
+            if (goal != null) Gl.textFit(c, goal, 540f, cy + 120f, 32f, 800f, Gl.regular, Gl.white(190), translate = false)
+            button(c, "retry", "Jugar de nuevo", 540f, cy + 230f, 680f, 130f, pal[0], 52f)
+            button(c, "exit", "Menú", 540f, cy + 390f, 680f, 120f, 0, 48f)
         } else {
             glassWindow(c, 110f, cy - 400f, 970f, cy + 400f, 70f, 1f, pal[1])
             Gl.text(c, "¡CASI!", 540f, cy - 250f, 78f, Gl.medium, Gl.white(245), 0.2f)

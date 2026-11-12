@@ -20,15 +20,24 @@ object Trails {
         // nuevas
         "Nieve", "Hojas", "Notas musicales", "Pétalos", "Electricidad", "Tinta", "Aurora boreal", "Código", "Ascuas",
         "Cristales", "Espiral", "Polvo de hadas", "Plasma", "Huellas", "Píxel arcoíris", "Cadena", "Meteoros", "Sombras",
-        "Prisma", "Supernova"
+        "Prisma", "Supernova",
+        // especiales de la Tienda (41..50): se compran con monedas
+        "Cola de dragón", "Río de estrellas", "Rayo cósmico", "Alas de luz", "Fuego fénix",
+        "Nebulosa", "Arcoíris líquido", "Burbujas mágicas", "Pétalos de sakura", "Estela infinita"
     )
+    /** Estelas especiales de la Tienda: índices PREMIUM_FIRST.. y su precio en monedas. */
+    const val PREMIUM_FIRST = 41
+    val price = intArrayOf(200, 300, 400, 550, 700, 900, 1100, 1400, 1800, 2400)
+    fun premium(k: Int): Boolean = k >= PREMIUM_FIRST && k < names.size
     val need = intArrayOf(0, 5, 12, 20, 30, 40, 52, 64, 78, 92, 108, 124, 142, 160, 180, 200, 222, 244, 268, 292, 318,
-        16, 26, 36, 48, 58, 70, 84, 98, 114, 130, 150, 170, 190, 212, 234, 256, 280, 304, 330, 352)
+        16, 26, 36, 48, 58, 70, 84, 98, 114, 130, 150, 170, 190, 212, 234, 256, 280, 304, 330, 352,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     val life = floatArrayOf(
         0.35f, 0.38f, 0.40f, 0.40f, 0.50f, 0.45f, 0.40f, 0.45f, 0.50f, 0.55f, 0.45f,
         0.50f, 0.60f, 0.25f, 0.40f, 0.45f, 0.55f, 0.50f, 0.50f, 0.50f, 0.60f,
         0.60f, 0.60f, 0.60f, 0.60f, 0.30f, 0.50f, 0.55f, 0.50f, 0.60f, 0.45f,
-        0.50f, 0.60f, 0.40f, 0.55f, 0.45f, 0.45f, 0.40f, 0.45f, 0.40f, 0.50f
+        0.50f, 0.60f, 0.40f, 0.55f, 0.45f, 0.45f, 0.40f, 0.45f, 0.40f, 0.50f,
+        0.55f, 0.60f, 0.45f, 0.55f, 0.60f, 0.62f, 0.50f, 0.60f, 0.60f, 0.60f
     )
     /** Tiempo máximo que se conserva un punto del rastro (el mayor de `life`). */
     const val MAX_LIFE = 0.62f
@@ -321,6 +330,7 @@ object Trails {
                 quad(c, t[0] + (h(i, 12) - 0.5f) * R * 1.4f, t[1] + t[2] * R * 3f, R * 0.28f, R * 0.14f, i * 47f + t[2] * 500f, Gl.alpha(pal[i % 4], (f * 240f).toInt()), 0)
             }
             in 21..40 -> drawNew(c, st, p, col, pal, R, tm, L)
+            in PREMIUM_FIRST until names.size -> drawPremium(c, st, p, col, pal, R, tm, L)
             else -> {}
         }
     }
@@ -503,6 +513,230 @@ object Trails {
                 if (f <= 0f || i % 6 != 0) continue
                 val rr = R * (0.2f + 1.3f * (1f - f))
                 ring(c, t[0], t[1], rr, R * 0.12f * f + 1f, Gl.alpha(if ((i / 6) % 2 == 0) col else Color.WHITE, (f * 220f).toInt()))
+            }
+        }
+    }
+
+    /** Resplandor con transparencia redondeada (pocas variantes: Gl.glow guarda un degradado por color y opacidad). */
+    private fun glowQ(c: Canvas, x: Float, y: Float, r: Float, col: Int, a: Int) {
+        val q = (a / 24) * 24
+        if (q > 0) Gl.glow(c, x, y, r, col, q)
+    }
+
+    private fun mixc(a: Int, b: Int, k: Float): Int {
+        val u = k.coerceIn(0f, 1f)
+        val r = ((a shr 16) and 255) + ((((b shr 16) and 255) - ((a shr 16) and 255)) * u).toInt()
+        val g = ((a shr 8) and 255) + ((((b shr 8) and 255) - ((a shr 8) and 255)) * u).toInt()
+        val bl = (a and 255) + (((b and 255) - (a and 255)) * u).toInt()
+        return Color.rgb(r, g, bl)
+    }
+
+    /** Estelas especiales de la Tienda (41..50): varias capas, brillo y movimiento propio. */
+    private fun drawPremium(c: Canvas, st: Int, p: List<FloatArray>, col: Int, pal: IntArray, R: Float, tm: Float, L: Float) {
+        val n0 = p.size
+        when (st) {
+            41 -> { // cola de dragón: cuerpo que ondula, escamas y chispas de fuego
+                for (i in 1 until n0) {
+                    val a = p[i - 1]; val b = p[i]; val f = 1f - b[2] / L
+                    if (f <= 0f) continue
+                    normal(p, i)
+                    val wv = sin(i * 0.45f - tm * 9f) * R * 0.55f * (1f - f)
+                    val wa = sin((i - 1) * 0.45f - tm * 9f) * R * 0.55f * (1f - (1f - a[2] / L))
+                    val x0 = a[0] + nx * wa; val y0 = a[1] + ny * wa
+                    val x1 = b[0] + nx * wv; val y1 = b[1] + ny * wv
+                    seg(c, x0, y0, x1, y1, R * 1.25f * f + 2f, Gl.alpha(Gl.darken(col, 0.45f), (f * 235f).toInt()))
+                    seg(c, x0, y0, x1, y1, R * 0.8f * f + 1.5f, Gl.alpha(col, (f * 240f).toInt()))
+                    if (i % 3 == 0) {
+                        val s2 = R * 0.55f * f
+                        seg(c, x1 - nx * s2, y1 - ny * s2, x1 + (b[0] - a[0]) * 0.8f, y1 + (b[1] - a[1]) * 0.8f, 2f, Gl.white((f * 170f).toInt()))
+                        seg(c, x1 + nx * s2, y1 + ny * s2, x1 + (b[0] - a[0]) * 0.8f, y1 + (b[1] - a[1]) * 0.8f, 2f, Gl.white((f * 170f).toInt()))
+                    }
+                    seg(c, x0, y0, x1, y1, R * 0.16f * f + 1f, Gl.white((f * 230f).toInt()))
+                    if (i % 4 == 0 && f < 0.55f) {
+                        val ex = x1 + (h(i, 41) - 0.5f) * R * 1.4f
+                        val ey = y1 + b[2] * R * 1.5f
+                        dot(c, ex, ey, R * 0.16f * (0.4f + f), Gl.alpha(0xFFFFB040.toInt(), (f * 2f * 255f).toInt().coerceAtMost(255)))
+                    }
+                }
+            }
+            42 -> { // río de estrellas: dos hebras en hélice con estrellitas que titilan
+                for (sgn in 0..1) for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f) continue
+                    normal(p, i)
+                    val o = sin(i * 0.5f + tm * 6f + sgn * 3.1416f) * R * 0.85f * (0.4f + 0.6f * (1f - f))
+                    val x = t[0] + nx * o; val y = t[1] + ny * o
+                    val front = cos(i * 0.5f + tm * 6f + sgn * 3.1416f) > 0f
+                    dot(c, x, y, R * (if (front) 0.2f else 0.12f) * (0.4f + 0.6f * f), Gl.alpha(if (sgn == 0) col else Color.WHITE, (f * (if (front) 255f else 140f)).toInt()))
+                    if (i % 5 == sgn) {
+                        val tw = 0.5f + 0.5f * sin(tm * 12f + i)
+                        glowQ(c, x, y, R * 1.1f * f, col, (f * 140f).toInt())
+                        star(c, x, y, R * (0.25f + 0.25f * tw) * f + 1f, tm * 3f + i, Gl.white((f * 255f).toInt()), Gl.alpha(col, (f * 255f).toInt()))
+                    }
+                }
+            }
+            43 -> { // rayo cósmico: haz grueso con núcleo blanco y arcos eléctricos
+                for (i in 1 until n0) {
+                    val a = p[i - 1]; val b = p[i]; val f = 1f - b[2] / L
+                    if (f <= 0f) continue
+                    seg(c, a[0], a[1], b[0], b[1], R * 2.1f * f, Gl.alpha(col, (f * 45f).toInt()))
+                    seg(c, a[0], a[1], b[0], b[1], R * 1.1f * f, Gl.alpha(col, (f * 130f).toInt()))
+                    seg(c, a[0], a[1], b[0], b[1], R * 0.38f * f + 1f, Gl.white((f * 255f).toInt()))
+                }
+                val fr2 = (tm * 24f).toInt()
+                for (k in 0..1) {
+                    var px = 0f; var py = 0f
+                    for (i in 0 until n0) {
+                        val t = p[i]; val f = 1f - t[2] / L
+                        if (f <= 0f) { px = 0f; continue }
+                        normal(p, i)
+                        val o = (h(i + fr2 * 7, k + 43) - 0.5f) * R * 1.8f * f
+                        val x = t[0] + nx * o; val y = t[1] + ny * o
+                        if (px != 0f && i % 2 == 0) seg(c, px, py, x, y, 2.2f, Gl.alpha(mixc(col, Color.WHITE, 0.6f), (f * 230f).toInt()))
+                        if (i % 2 == 0) { px = x; py = y }
+                    }
+                }
+            }
+            44 -> { // alas de luz: plumas que se abren a cada lado y se desvanecen
+                for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f || i % 3 != 0) continue
+                    normal(p, i)
+                    val side = if ((i / 3) % 2 == 0) 1f else -1f
+                    val open = (1f - f) * 0.9f + 0.1f
+                    val len = R * (1.4f + 0.6f * h(i, 44)) * (0.5f + 0.5f * f)
+                    val bx = t[0]; val by = t[1]
+                    val tx = bx + nx * side * len * open + (h(i, 45) - 0.5f) * R * 0.3f
+                    val ty = by + ny * side * len * open + len * 0.45f
+                    path.reset()
+                    path.moveTo(bx, by)
+                    path.quadTo((bx + tx) / 2f + nx * side * R * 0.35f, (by + ty) / 2f - R * 0.5f, tx, ty)
+                    path.quadTo((bx + tx) / 2f - nx * side * R * 0.1f, (by + ty) / 2f + R * 0.25f, bx, by)
+                    val pp = Gl.p()
+                    pp.color = Gl.alpha(mixc(col, Color.WHITE, 0.35f), (f * 190f).toInt())
+                    c.drawPath(path, pp)
+                    val ps = Gl.p()
+                    ps.style = Paint.Style.STROKE
+                    ps.strokeWidth = 1.6f
+                    ps.color = Gl.white((f * 230f).toInt())
+                    c.drawPath(path, ps)
+                    glowQ(c, tx, ty, R * 0.7f * f, col, (f * 160f).toInt())
+                }
+            }
+            45 -> { // fuego fénix: bolas de fuego que suben y pasan de blanco a rojo
+                for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f || i % 2 != 0) continue
+                    val age = 1f - f
+                    val x = t[0] + sin(i * 1.7f + tm * 7f) * R * 0.35f * age
+                    val y = t[1] - age * R * 1.2f
+                    val cc = if (age < 0.25f) mixc(Color.WHITE, col, age / 0.25f) else if (age < 0.6f) mixc(col, 0xFFFF8A20.toInt(), (age - 0.25f) / 0.35f) else mixc(0xFFFF8A20.toInt(), 0xFFB01818.toInt(), (age - 0.6f) / 0.4f)
+                    glowQ(c, x, y, R * (0.9f + age * 1.4f), cc, (f * 200f).toInt())
+                    dot(c, x, y, R * 0.35f * f + 1f, Gl.alpha(mixc(cc, Color.WHITE, 0.5f), (f * 255f).toInt()))
+                    if (i % 6 == 0 && age > 0.3f) dot(c, x + (h(i, 46) - 0.5f) * R * 2f, y - age * R * 2f, R * 0.12f, Gl.alpha(0xFFFFD060.toInt(), (f * 255f).toInt()))
+                }
+            }
+            46 -> { // nebulosa: nubes de colores que se expanden, con estrellas
+                for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f || i % 3 != 0) continue
+                    val age = 1f - f
+                    val cc = pal[(i / 3) % 4]
+                    val ox = (h(i, 47) - 0.5f) * R * 1.6f * age
+                    val oy = (h(i, 48) - 0.5f) * R * 1.6f * age
+                    glowQ(c, t[0] + ox, t[1] + oy, R * (1.2f + age * 2.4f), cc, (f * 150f).toInt())
+                    if (i % 6 == 0) {
+                        val tw = 0.5f + 0.5f * sin(tm * 10f + i * 2f)
+                        star(c, t[0] - ox * 1.5f, t[1] - oy * 1.5f, R * 0.22f * (0.5f + tw) + 1f, tm + i, Gl.white((f * 255f).toInt()), Gl.white((f * 120f).toInt()))
+                    }
+                }
+            }
+            47 -> { // arcoíris líquido: cinta gruesa de bandas que fluyen, con brillo
+                for (i in 1 until n0) {
+                    val a = p[i - 1]; val b = p[i]; val f = 1f - b[2] / L
+                    if (f <= 0f) continue
+                    normal(p, i)
+                    val w = R * 1.5f * (0.35f + 0.65f * f)
+                    for (k in 0 until 5) {
+                        val o = (k - 2f) / 5f * w
+                        val hc = Color.HSVToColor(floatArrayOf(((k * 60f + i * 9f - tm * 160f) % 360f + 360f) % 360f, 0.75f, 1f))
+                        seg(c, a[0] + nx * o, a[1] + ny * o, b[0] + nx * o, b[1] + ny * o, w / 5f + 1.5f, Gl.alpha(hc, (f * 230f).toInt()))
+                    }
+                    seg(c, a[0] - nx * w * 0.25f, a[1] - ny * w * 0.25f, b[0] - nx * w * 0.25f, b[1] - ny * w * 0.25f, w * 0.12f + 1f, Gl.white((f * 200f).toInt()))
+                }
+            }
+            48 -> { // burbujas mágicas: tornasoladas, crecen, flotan y revientan
+                for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f || i % 3 != 0) continue
+                    val age = 1f - f
+                    val x = t[0] + (h(i, 49) - 0.5f) * R * 2f + sin(tm * 3f + i) * R * 0.2f
+                    val y = t[1] - age * R * 1.5f
+                    val rr = R * (0.25f + 0.55f * h(i, 50)) * (0.5f + age)
+                    if (f < 0.12f) { ring(c, x, y, rr * (1.6f - f * 4f), 1.5f, Gl.white((f * 8f * 200f).toInt().coerceAtMost(200))); continue }
+                    val hc = Color.HSVToColor(floatArrayOf((i * 37f + tm * 120f) % 360f, 0.55f, 1f))
+                    dot(c, x, y, rr, Gl.alpha(col, (f * 50f).toInt()))
+                    ring(c, x, y, rr, 2.2f, Gl.alpha(hc, (f * 230f).toInt()))
+                    ring(c, x, y, rr * 0.82f, 1.2f, Gl.alpha(mixc(hc, col, 0.5f), (f * 120f).toInt()))
+                    dot(c, x - rr * 0.35f, y - rr * 0.35f, rr * 0.2f, Gl.white((f * 230f).toInt()))
+                }
+            }
+            49 -> { // pétalos de sakura: giran y caen
+                for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f || i % 2 != 0) continue
+                    val age = 1f - f
+                    val x = t[0] + (h(i, 51) - 0.5f) * R * 2.2f + sin(tm * 2.5f + i) * R * 0.5f * age
+                    val y = t[1] + age * R * 1.8f
+                    val s2 = R * (0.3f + 0.15f * h(i, 52)) * (0.6f + 0.4f * f)
+                    c.save()
+                    c.translate(x, y)
+                    c.rotate(i * 40f + tm * 140f * (if (i % 4 == 0) -1f else 1f))
+                    c.scale(1f, 0.55f + 0.45f * sin(tm * 5f + i))
+                    path.reset()
+                    path.moveTo(0f, s2)
+                    path.cubicTo(-s2 * 1.1f, s2 * 0.2f, -s2 * 0.6f, -s2 * 0.9f, -s2 * 0.12f, -s2 * 0.7f)
+                    path.lineTo(0f, -s2 * 0.45f)
+                    path.lineTo(s2 * 0.12f, -s2 * 0.7f)
+                    path.cubicTo(s2 * 0.6f, -s2 * 0.9f, s2 * 1.1f, s2 * 0.2f, 0f, s2)
+                    path.close()
+                    val pp = Gl.p()
+                    pp.color = Gl.alpha(mixc(0xFFFFA8C8.toInt(), col, 0.3f), (f * 240f).toInt())
+                    c.drawPath(path, pp)
+                    val pi = Gl.p()
+                    pi.color = Gl.white((f * 120f).toInt())
+                    c.drawCircle(0f, s2 * 0.1f, s2 * 0.28f, pi)
+                    c.restore()
+                }
+            }
+            50 -> { // estela infinita: tres hebras arcoíris en hélice, núcleo de luz y destellos
+                for (i in 1 until n0) {
+                    val a = p[i - 1]; val b = p[i]; val f = 1f - b[2] / L
+                    if (f <= 0f) continue
+                    seg(c, a[0], a[1], b[0], b[1], R * 0.9f * f, Gl.alpha(col, (f * 90f).toInt()))
+                    seg(c, a[0], a[1], b[0], b[1], R * 0.25f * f + 1f, Gl.white((f * 240f).toInt()))
+                }
+                for (k in 0 until 3) {
+                    var px = 0f; var py = 0f
+                    for (i in 0 until n0) {
+                        val t = p[i]; val f = 1f - t[2] / L
+                        if (f <= 0f) { px = 0f; continue }
+                        normal(p, i)
+                        val o = sin(i * 0.42f - tm * 7f + k * 2.094f) * R * 1.0f * (0.35f + 0.65f * (1f - f))
+                        val x = t[0] + nx * o; val y = t[1] + ny * o
+                        if (px != 0f) {
+                            val hc = Color.HSVToColor(floatArrayOf(((k * 120f + i * 8f - tm * 200f) % 360f + 360f) % 360f, 0.8f, 1f))
+                            seg(c, px, py, x, y, R * 0.22f * f + 1.2f, Gl.alpha(hc, (f * 240f).toInt()))
+                        }
+                        px = x; py = y
+                    }
+                }
+                for (i in 0 until n0) {
+                    val t = p[i]; val f = 1f - t[2] / L
+                    if (f <= 0f || i % 7 != 0) continue
+                    val tw = 0.5f + 0.5f * sin(tm * 14f + i)
+                    spark(c, t[0] + (h(i, 53) - 0.5f) * R * 2f, t[1] + (h(i, 54) - 0.5f) * R * 2f, R * (0.3f + 0.3f * tw) * f + 1f, Color.WHITE, (f * 255f).toInt())
+                }
             }
         }
     }
