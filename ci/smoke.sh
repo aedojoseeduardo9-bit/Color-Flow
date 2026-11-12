@@ -63,6 +63,22 @@ alive() { adb shell pidof $P > /dev/null 2>&1 && echo "  app viva" || echo "  LA
   go pausa:20;          shot 33_pausa "pausa en el nivel 20"; alive
   go ganar:20 6;        shot 34_ganar "nivel superado"; alive
   go nivel:2 5; adb shell input tap 540 1700; sleep 1.3; shot 35a_muerte "momento de morir: onda y gajos de la bola"; sleep 6; shot 35_perder "perder (un toque y la bola cae)"; alive
+  # Tienda (esferas pintadas píxel por píxel y estelas especiales), logros, monedas y regalo diario
+  tq() { for i in 1 2 3; do timeout 5 adb shell input tap 540 1700 > /dev/null 2>&1; sleep 0.25; done; }
+  go monedas:640,tiendaver:0:0 7;     shot 40_tienda "Tienda: esferas (Núcleo de plasma elegida)"; alive
+  go monedas:640,tiendaver:0:18 7;    shot 40b_tienda_ojo "Tienda: Ojo del dragón (legendaria)"; alive
+  go monedas:9000,tiendaver:0:34 7;   shot 40c_tienda_infinito "Tienda: Infinito (mítica), con monedas para comprar"; alive
+  timeout 10 adb shell input swipe 540 2000 540 900 400; sleep 2; shot 40d_tienda_abajo "Tienda: más abajo (legendarias y míticas)"; alive
+  go monedas:640,tiendaver:1:3 7;     shot 41_tienda_estelas "Tienda: estelas especiales"; alive
+  go comprada:18,apariencias 6;       shot 42_apariencias_tienda "Apariencias con la burbuja Tienda (Ojo del dragón)"; alive
+  go comprada:29,nivel:3 6; tq;       shot 43_fenix_jugando "esfera Fénix jugando"; alive
+  go comprada:28,infinito 6; tq;      shot 43b_singularidad "Singularidad en el modo infinito (aviso de logro)"; alive
+  go comprada:104,nivel:4 6; tq;      shot 43c_estela_fenix "estela Fuego fénix jugando"; alive
+  go comprada:30,aventura:2 9;        shot 44_aventura_mariposa "Mariposa de luz en la Aventura (monedas en el panel)"; alive
+  go logros 6;                        shot 45_logros "Logros (desde Ajustes)"; alive
+  go aviso:21 2;                      shot 46_aviso "aviso de logro"; alive
+  go regalo 5;                        shot 47_regalo "regalo diario"; alive
+  go infinitofin:37 6;                shot 48_infinito_fin "fin del infinito con monedas ganadas"; alive
 } > steps.txt 2>&1
 
 # Idiomas: las mismas pantallas en ruso (el más largo) y en español, para ver textos que se salen o sin traducir.
@@ -89,6 +105,12 @@ tour() {
   go taller 9;          shot ${L}_17_taller "$L Taller"
   go editor:60 6;       shot ${L}_18_editor "$L editor"
   go galeria:60 6;      shot ${L}_19_galeria "$L galería"
+  go monedas:640,tiendaver:0:5 6;   shot ${L}_20_tienda "$L Tienda"
+  go tiendaver:1:2 6;               shot ${L}_21_tienda_estelas "$L Tienda: estelas"
+  go logros 6;                      shot ${L}_22_logros "$L logros"
+  go regalo 5;                      shot ${L}_23_regalo "$L regalo diario"
+  go aviso:5 2;                     shot ${L}_24_aviso "$L aviso de logro"
+  go infinitofin:37 6;              shot ${L}_25_infinito_fin "$L fin del infinito"
   alive
 }
 {

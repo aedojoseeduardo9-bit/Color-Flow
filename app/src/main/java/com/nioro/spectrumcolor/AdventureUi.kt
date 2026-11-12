@@ -217,6 +217,7 @@ class AdvUi(
         bannerAge += dt
         bossSquash = max(0f, bossSquash - dt * 4f)
         heartPop = max(0f, heartPop - dt * 3.5f)
+        coinPop = max(0f, coinPop - dt * 3.5f)
         zoom = max(0f, zoom - dt * 1.2f)
         if (phase == 1 || phase == 3) {
             if (phase == 3) { inp.left = false; inp.right = false; inp.jumpHeld = false }
@@ -292,6 +293,10 @@ class AdvUi(
 
     private fun say(s: String, t: Float = 2.2f) { banner = s; bannerT = t; bannerAge = 0f }
 
+    /** Las monedas se ganan jugando de verdad: no en modo dios, en el Taller ni probando salas. */
+    private fun earns(a: Adv): Boolean = !a.god && a.maker == null && !mkTesting
+    private var coinPop = 0f
+
     private fun handleEvents(a: Adv) {
         val pal = Worlds.colors[world.coerceIn(0, Worlds.colors.size - 1)]
         for (e in a.events) {
@@ -309,8 +314,15 @@ class AdvUi(
                 Adv.EV_SPECIAL -> sfx(Sfx.SWITCH)
                 Adv.EV_BOLT -> { flash = max(flash, 0.5f); sfx(Sfx.WIN) }
                 Adv.EV_BOSSHIT -> { burst(e.x, e.y, Color.WHITE, 9, 140f); sfx(Sfx.TAP); if (e.n > 0) nums.add(Num(e.x, e.y - 20f, e.n.toString(), 0.7f, 0xFFFFE070.toInt())) }
-                Adv.EV_BOSSDIE -> { for (k in 0 until 5) burst(e.x, e.y, pal[k % 4], 24, 240f); flash = 1f; zoom = 1f; sfx(Sfx.WIN) }
-                Adv.EV_EDIE -> { burst(e.x, e.y, pal[2], 12, 130f); corpses.add(Corpse(e.x, e.y, pal[2], 0f)); hitStopA = max(hitStopA, 0.05f) }
+                Adv.EV_BOSSDIE -> {
+                    for (k in 0 until 5) burst(e.x, e.y, pal[k % 4], 24, 240f); flash = 1f; zoom = 1f; sfx(Sfx.WIN)
+                    if (earns(a)) { prefs?.earn(30); prefs?.addStat("bosses"); nums.add(Num(e.x, e.y - 40f, "+30", 1.6f, 0xFFFFD86A.toInt())) }
+                }
+                Adv.EV_EDIE -> {
+                    burst(e.x, e.y, pal[2], 12, 130f); corpses.add(Corpse(e.x, e.y, pal[2], 0f)); hitStopA = max(hitStopA, 0.05f)
+                    // cada enemigo derrotado da una moneda (no en modo dios ni en el Taller)
+                    if (earns(a)) { prefs?.earn(1); prefs?.addStat("kills"); nums.add(Num(e.x, e.y - 22f, "+1", 0.9f, 0xFFFFD86A.toInt())); coinPop = 1f }
+                }
                 Adv.EV_CHECK -> { burst(e.x, e.y - 30f, 0xFFFF6070.toInt(), 16, 100f, 0f); sfx(Sfx.STAR); say("Progreso guardado", 1.6f) }
                 Adv.EV_UNLOCK -> { burst(e.x, e.y, 0xFFFFD060.toInt(), 18, 130f); sfx(Sfx.WIN); say("Puerta abierta", 1.6f) }
                 Adv.EV_LOCKED -> { sfx(Sfx.TAP); say("Necesitas una llave", 1.4f) }
@@ -1810,6 +1822,9 @@ class AdvUi(
         val hs = 1f + 0.4f * heartPop
         heart(c, 24f, 42f, 0.9f * hs, 0xFFFF4070.toInt())
         Gl.text(c, "${a.hearts}", 36f, 49f, 15f * hs, Gl.medium, Gl.white(235), 0f, null, 0, Paint.Align.LEFT)
+        val cs = 1f + 0.4f * coinPop
+        Gl.coin(c, 74f, 42f, 7f * cs, time)
+        Gl.text(c, "${prefs?.coins ?: 0}", 85f, 47f, 13f * cs, Gl.medium, 0xFFFFE08A.toInt(), 0f, null, 0, Paint.Align.LEFT, false)
         gloss(c, 1, 18f, 58f, 44f, 84f, 7f, if (a.sub == 0) 0xFF505868.toInt() else 0xFF70C8FF.toInt())
         if (a.sub != 0) Gl.text(c, AdvCfg.subLetters.substring(a.sub, a.sub + 1), 31f, 77f, 17f, Gl.medium, Color.BLACK)
         Gl.text(c, if (a.sub == 0) "Sin arma" else "${I18n.t(AdvCfg.subNames[a.sub])} (${AdvCfg.subCost[a.sub]})", 50f, 76f, 12f, Gl.regular, Gl.white(190), 0f, null, 0, Paint.Align.LEFT)

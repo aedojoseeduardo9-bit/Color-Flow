@@ -4,7 +4,7 @@ package com.nioro.spectrumcolor
 object Skins {
     const val ANIM_FIRST = 40
 
-    val names = arrayOf(
+    private val base = arrayOf(
         "Cristal", "Aurora", "Rayas", "Lunares", "Estrella", "Planeta",
         "Diamante", "Núcleo", "Oro", "Neón", "Arcoíris", "Galaxia",
         "Relámpago", "Corazón", "Ojo", "Cuadros", "Burbujas", "Ondas", "Sol", "Pixel",
@@ -27,6 +27,11 @@ object Skins {
         "Lámpara de lava", "Corazón latiendo", "Yin yang", "Átomo", "Llamarada solar", "Caleidoscopio"
     )
 
+    /** 99..133: esferas de la Tienda (Premium.kt), se compran con monedas. */
+    const val PREMIUM_FIRST = 99
+    val names: Array<String> = base + Premium.names
+    fun premium(k: Int): Boolean = k >= PREMIUM_FIRST && k < PREMIUM_FIRST + Premium.COUNT
+
     val need = intArrayOf(
         0, 0, 4, 8, 12, 16, 20, 25, 30, 36, 42, 48, 55, 62, 70, 78, 86, 95, 104, 114,
         124, 135, 146, 158, 170, 183, 196, 210, 224, 238, 252, 266, 280, 294, 308, 322, 334, 344, 352, 358,
@@ -42,11 +47,11 @@ object Skins {
 
     /** Las apariencias 79..98 se abren con estrellas O con mundos salvados en la Aventura. */
     const val STELLAR_FIRST = 79
-    fun stellar(k: Int): Boolean = k >= STELLAR_FIRST
+    fun stellar(k: Int): Boolean = k in STELLAR_FIRST until PREMIUM_FIRST
     fun advNeed(k: Int): Int = 1 + ((k - STELLAR_FIRST) * 11) / 19
     /** El hámster (77) es más fácil de conseguir: 60 puntos en el infinito o 3 mundos. */
     fun endNeed(k: Int): Int = if (k == 78) 80 else if (k == 77) 60 else 20 + (k - SPECIAL_FIRST) * 10
     fun worldNeed(k: Int): Int = if (k == 78) 4 else if (k == 77) 3 else 1 + ((k - SPECIAL_FIRST) * 11) / 16
 
-    fun isAnim(k: Int): Boolean = k >= ANIM_FIRST
+    fun isAnim(k: Int): Boolean = k in ANIM_FIRST until PREMIUM_FIRST
 }

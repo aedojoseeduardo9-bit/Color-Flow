@@ -199,12 +199,12 @@ object Gl {
     /** Texto que se achica solo si no cabe en maxW. */
     fun textFit(
         c: Canvas, s: String, x: Float, y: Float, size: Float, maxW: Float, tf: Typeface, color: Int,
-        spacing: Float = 0f, align: Paint.Align = Paint.Align.CENTER
+        spacing: Float = 0f, align: Paint.Align = Paint.Align.CENTER, translate: Boolean = true
     ) {
         var sz = size
-        val w = textWidth(s, sz, tf, spacing)
+        val w = textWidth(s, sz, tf, spacing, translate)
         if (w > maxW && w > 0f) sz = size * maxW / w
-        text(c, s, x, y, sz, tf, color, spacing, null, 0, align)
+        text(c, s, x, y, sz, tf, color, spacing, null, 0, align, translate)
     }
 
     /** Panel de cristal líquido: sombra, relleno translúcido, brillos y borde de luz. */
@@ -260,4 +260,86 @@ object Gl {
     }
 
     private fun max1(v: Float): Float = if (v < 1f) 1f else v
+
+    private val COIN_STOPS = floatArrayOf(0f, 0.5f, 1f)
+    private val COIN_COLS = intArrayOf(0xFFFFF6C0.toInt(), 0xFFFFC233.toInt(), 0xFFB06400.toInt())
+    private val coinPath = Path()
+
+    /** Moneda dorada del juego (la de la Tienda). tm hace que gire un poco. */
+    fun coin(c: Canvas, x: Float, y: Float, r: Float, tm: Float = 0f) {
+        val sq = 0.78f + 0.22f * kotlin.math.abs(kotlin.math.cos(tm * 1.8f))
+        c.save()
+        c.scale(sq, 1f, x, y)
+        var pp = p()
+        pp.color = 0xFF8A4A00.toInt()
+        c.drawCircle(x, y + r * 0.08f, r, pp)
+        shadedCircle(c, x, y, r, 7, 0xFFFFC233.toInt(), -0.35f, -0.4f, 1.5f, COIN_COLS, COIN_STOPS)
+        pp = p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = r * 0.12f
+        pp.color = 0xFFD98E00.toInt()
+        c.drawCircle(x, y, r * 0.74f, pp)
+        // estrella grabada
+        coinPath.reset()
+        for (i in 0 until 10) {
+            val rr = if (i % 2 == 0) r * 0.46f else r * 0.2f
+            val a = (-90.0 + i * 36.0) * Math.PI / 180.0
+            val px = x + (rr * kotlin.math.cos(a)).toFloat()
+            val py = y + (rr * kotlin.math.sin(a)).toFloat()
+            if (i == 0) coinPath.moveTo(px, py) else coinPath.lineTo(px, py)
+        }
+        coinPath.close()
+        pp = p()
+        pp.color = 0xFFFFE680.toInt()
+        c.drawPath(coinPath, pp)
+        pp = p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = r * 0.06f
+        pp.color = 0xFFC07800.toInt()
+        c.drawPath(coinPath, pp)
+        pp = p()
+        pp.color = white(170)
+        rect.set(x - r * 0.62f, y - r * 0.72f, x - r * 0.08f, y - r * 0.38f)
+        c.drawOval(rect, pp)
+        c.restore()
+    }
+
+    /** Trofeo (copa) para los logros. col = color del metal. */
+    fun trophy(c: Canvas, x: Float, y: Float, s: Float, col: Int) {
+        val dark = darken(col, 0.6f)
+        var pp = p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = s * 0.12f
+        pp.color = dark
+        rect.set(x - s * 0.78f, y - s * 0.62f, x - s * 0.18f, y - s * 0.02f)
+        c.drawArc(rect, 90f, 180f, false, pp)
+        rect.set(x + s * 0.18f, y - s * 0.62f, x + s * 0.78f, y - s * 0.02f)
+        c.drawArc(rect, -90f, 180f, false, pp)
+        coinPath.reset()
+        coinPath.moveTo(x - s * 0.55f, y - s * 0.7f)
+        coinPath.lineTo(x + s * 0.55f, y - s * 0.7f)
+        coinPath.cubicTo(x + s * 0.55f, y + s * 0.05f, x + s * 0.2f, y + s * 0.25f, x + s * 0.1f, y + s * 0.3f)
+        coinPath.lineTo(x + s * 0.12f, y + s * 0.52f)
+        coinPath.lineTo(x + s * 0.42f, y + s * 0.62f)
+        coinPath.lineTo(x + s * 0.42f, y + s * 0.78f)
+        coinPath.lineTo(x - s * 0.42f, y + s * 0.78f)
+        coinPath.lineTo(x - s * 0.42f, y + s * 0.62f)
+        coinPath.lineTo(x - s * 0.12f, y + s * 0.52f)
+        coinPath.lineTo(x - s * 0.1f, y + s * 0.3f)
+        coinPath.cubicTo(x - s * 0.2f, y + s * 0.25f, x - s * 0.55f, y + s * 0.05f, x - s * 0.55f, y - s * 0.7f)
+        coinPath.close()
+        pp = p()
+        pp.shader = null
+        pp.color = col
+        c.drawPath(coinPath, pp)
+        pp = p()
+        pp.color = white(150)
+        rect.set(x - s * 0.4f, y - s * 0.62f, x - s * 0.18f, y - s * 0.05f)
+        c.drawRoundRect(rect, s * 0.1f, s * 0.1f, pp)
+        pp = p()
+        pp.style = Paint.Style.STROKE
+        pp.strokeWidth = s * 0.06f
+        pp.color = dark
+        c.drawPath(coinPath, pp)
+    }
 }
