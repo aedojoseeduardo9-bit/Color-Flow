@@ -1824,7 +1824,8 @@ class AdvUi(
         Gl.text(c, "${a.hearts}", 36f, 49f, 15f * hs, Gl.medium, Gl.white(235), 0f, null, 0, Paint.Align.LEFT)
         val cs = 1f + 0.4f * coinPop
         Gl.coin(c, 74f, 42f, 7f * cs, time)
-        Gl.text(c, "${prefs?.coins ?: 0}", 85f, 47f, 13f * cs, Gl.medium, 0xFFFFE08A.toInt(), 0f, null, 0, Paint.Align.LEFT, false)
+        val pf = prefs
+        Gl.text(c, if (pf?.infiniteCoins == true) "∞" else "${pf?.coins ?: 0}", 85f, 47f, 13f * cs, Gl.medium, 0xFFFFE08A.toInt(), 0f, null, 0, Paint.Align.LEFT, false)
         gloss(c, 1, 18f, 58f, 44f, 84f, 7f, if (a.sub == 0) 0xFF505868.toInt() else 0xFF70C8FF.toInt())
         if (a.sub != 0) Gl.text(c, AdvCfg.subLetters.substring(a.sub, a.sub + 1), 31f, 77f, 17f, Gl.medium, Color.BLACK)
         Gl.text(c, if (a.sub == 0) "Sin arma" else "${I18n.t(AdvCfg.subNames[a.sub])} (${AdvCfg.subCost[a.sub]})", 50f, 76f, 12f, Gl.regular, Gl.white(190), 0f, null, 0, Paint.Align.LEFT)

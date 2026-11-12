@@ -195,6 +195,17 @@ class Prefs(context: Context) {
         get() = sp.getInt("coins", 0)
         set(v) { sp.edit().putInt("coins", v.coerceAtLeast(0)).apply() }
 
+    /** Solo versión de desarrollador: monedas infinitas (se apaga en Ajustes para probar la economía de verdad). */
+    var infiniteCoins: Boolean
+        get() = BuildConfig.DEV && sp.getBoolean("infCoins", true)
+        set(v) { sp.edit().putBoolean("infCoins", v).apply() }
+
+    /** ¿Alcanza para gastar n? (siempre, con monedas infinitas) */
+    fun canSpend(n: Int): Boolean = infiniteCoins || coins >= n
+
+    /** Gasta n monedas (con monedas infinitas no se descuenta nada). */
+    fun spend(n: Int) { if (!infiniteCoins) coins = coins - n }
+
     /** Suma monedas ganadas (también cuentan para los logros de monedas). */
     fun earn(n: Int) {
         if (n <= 0) return

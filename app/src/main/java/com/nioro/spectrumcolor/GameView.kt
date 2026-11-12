@@ -232,7 +232,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             // dibuja el ícono de la app (esfera Aurora boreal sobre el fondo del menú) para recortarlo de la captura
             "icono" -> { goHome(); iconShot = n1 + 1 }
             "legado" -> Gl.legacy = n1 == 1
-            "tienda" -> storeLook = n1 == 1
+            "tienda" -> { storeLook = n1 == 1; if (storeLook) prefs.infiniteCoins = false }
             "terminos" -> { scr = Scr.TERMS; termsChecked = n1 == 1; skinScroll = 0f; skinVel = 0f }
             // filmación del anuncio: "filmar:nombre:cuadros[:jefe]" graba esa cantidad de cuadros de la pantalla actual;
             // "filmadv:W" abre el mundo W de la Aventura en modo dios para que lo juegue el bot
@@ -249,7 +249,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             // (K ≥ 100: la estela K-100) y la usa; "tiendaver:T:K" abre la pestaña T con la K elegida;
             // "logros" abre la lista; "aviso" muestra un aviso de logro; "regalo" abre el regalo diario;
             // "infinitofin:N" muestra el final del modo infinito con N puntos
-            "monedas" -> prefs.coins = n1
+            "monedas" -> { prefs.infiniteCoins = false; prefs.coins = n1 }
             "comprada" -> if (n1 >= 100) { if (n1 - 100 in Trails.price.indices) { prefs.ownTrails = prefs.ownTrails or (1 shl (n1 - 100)); prefs.trail = Trails.PREMIUM_FIRST + n1 - 100 } }
                 else if (n1 in 0 until Premium.COUNT) { prefs.ownSpheres = prefs.ownSpheres or (1L shl n1); prefs.skin = Skins.PREMIUM_FIRST + n1 }
             "tiendaver" -> { prefs.allOpen = false; openShop(Scr.SKINS, n1.coerceIn(0, 1)); shopSel = n2; skinScroll = ((n2 / 3) * 360f - 200f).coerceAtLeast(0f) }
@@ -899,6 +899,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             id == "teasy" -> prefs.easy = !prefs.easy
             id == "tname" || id == "mp_name" -> api.prompt(I18n.t("Tu nombre"), prefs.name, I18n.t("Nombre")) { prefs.name = it }
             id == "topen" -> if (BuildConfig.DEV) prefs.allOpen = !prefs.allOpen
+            id == "tcoins" -> if (BuildConfig.DEV) prefs.infiniteCoins = !prefs.infiniteCoins
             id == "treset" -> { resetDlg = 1; resetDlgT = time }
             // términos y condiciones
             id == "tchk" -> termsChecked = !termsChecked
@@ -2558,7 +2559,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         // alturas en unidades de diseño; si la pantalla es baja se comprimen las filas
         val soundH = 20f + 2f * 190f + 112f
         val gameH = 20f + 4f * 112f
-        val dataH = 20f + (if (dev) 4f else 3f) * 112f
+        val dataH = 20f + (if (dev) 5f else 3f) * 112f
         val fixed = 3f * 64f + 2f * 28f
         val avail = vh - 110f - start
         val k = min(1f, (avail - fixed) / (soundH + gameH + dataH))
@@ -2650,6 +2651,9 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             ry += rh; sep(ry)
             label("Niveles", ry + rh / 2f)
             button(c, "topen", if (prefs.allOpen) "Todos abiertos" else "Abrir todos", bx, ry + rh / 2f, bw, bh, 0, 40f)
+            ry += rh; sep(ry)
+            label("Monedas", ry + rh / 2f)
+            button(c, "tcoins", if (prefs.infiniteCoins) "Infinitas" else "Normales", bx, ry + rh / 2f, bw, bh, if (prefs.infiniteCoins) gold else 0, 40f)
         }
 
         // número de la versión instalada: sirve para saber si el botón "Actualización" encontró una más nueva
@@ -5644,13 +5648,13 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             return
         }
         val price = shopPrice(i)
-        if (prefs.coins < price) {
+        if (!prefs.canSpend(price)) {
             needT = time
             audio.play(Sfx.BACK)
             haptic(HapticFeedbackConstants.VIRTUAL_KEY)
             return
         }
-        prefs.coins = prefs.coins - price
+        prefs.spend(price)
         if (shopTab == 0) {
             prefs.ownSpheres = prefs.ownSpheres or (1L shl i)
             prefs.skin = Skins.PREMIUM_FIRST + i
@@ -5667,9 +5671,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     }
 
     private fun affordable(): Boolean {
-        val c0 = prefs.coins
-        for (i in 0 until Premium.COUNT) if (!prefs.ownsSphere(i) && Premium.price[i] <= c0) return true
-        for (i in Trails.price.indices) if (!prefs.ownsTrail(i) && Trails.price[i] <= c0) return true
+        for (i in 0 until Premium.COUNT) if (!prefs.ownsSphere(i) && prefs.canSpend(Premium.price[i])) return true
+        for (i in Trails.price.indices) if (!prefs.ownsTrail(i) && prefs.canSpend(Trails.price[i])) return true
         return false
     }
 
@@ -5677,7 +5680,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     private fun nextGoal(): String? {
         for (i in 0 until Premium.COUNT) if (!prefs.ownsSphere(i)) {
             val left = Premium.price[i] - prefs.coins
-            return if (left > 0) String.format(I18n.t("Faltan %1\$d monedas para «%2\$s»"), left, I18n.t(Premium.names[i]))
+            return if (!prefs.canSpend(Premium.price[i])) String.format(I18n.t("Faltan %1\$d monedas para «%2\$s»"), left, I18n.t(Premium.names[i]))
             else String.format(I18n.t("¡Ya puedes comprar «%s» en la Tienda!"), I18n.t(Premium.names[i]))
         }
         return null
@@ -5826,7 +5829,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     // ---------------- piezas de interfaz ----------------
     /** Contador de monedas. tappable: abre la Tienda. */
     private fun coinPill(c: Canvas, cx: Float, cy: Float, tappable: Boolean) {
-        val txt = prefs.coins.toString()
+        // versión de desarrollador: monedas infinitas
+        val txt = if (prefs.infiniteCoins) "∞" else prefs.coins.toString()
         val tw = Gl.textWidth(txt, 44f, Gl.medium, 0f, false)
         val w = max(170f, tw + 110f)
         val pressed = tappable && pressedId == "shop"
@@ -5955,7 +5959,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val owned = shopOwned(sel)
         val inUse = owned && shopInUse(sel)
         val price = shopPrice(sel)
-        val can = prefs.coins >= price
+        val can = prefs.canSpend(price)
         val label = if (inUse) "En uso" else if (owned) "Usar" else if (can) "Comprar por $price" else "Te faltan ${price - prefs.coins}"
         val ne = time - needT
         val dx = if (ne < 0.45f) sin(ne * 60f) * 16f * (1f - ne / 0.45f) else 0f
@@ -6027,7 +6031,7 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
                 val ps = shopPrice(j).toString()
                 val pw = Gl.textWidth(ps, 34f, Gl.medium, 0f, false)
                 Gl.coin(c, cx - pw / 2f - 18f, cy + 131f, 17f, time + j)
-                Gl.text(c, ps, cx + 14f, cy + 143f, 34f, Gl.medium, if (prefs.coins >= shopPrice(j)) 0xFFFFD86A.toInt() else Gl.white(170), 0f, null, 0, Paint.Align.CENTER, false)
+                Gl.text(c, ps, cx + 14f, cy + 143f, 34f, Gl.medium, if (prefs.canSpend(shopPrice(j))) 0xFFFFD86A.toInt() else Gl.white(170), 0f, null, 0, Paint.Align.CENTER, false)
             }
             val ht = max(gy, cy - ch / 2f)
             val hb = min(viewBot, cy + ch / 2f)

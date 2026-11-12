@@ -643,6 +643,9 @@ object I18n {
         p("Total  (\\d+) – (\\d+)", "Total  $1 – $2", "Итого  $1 – $2")
         // --- Tienda, monedas, logros y regalo diario ---
         d("TIENDA", "SHOP", "МАГАЗИН")
+        d("Monedas", "Coins", "Монеты")
+        d("Infinitas", "Infinite", "Бесконечные")
+        d("Normales", "Normal", "Обычные")
         d("Tienda", "Shop", "Магазин")
         d("Esferas", "Spheres", "Сферы")
         d("En uso", "In use", "Используется")
