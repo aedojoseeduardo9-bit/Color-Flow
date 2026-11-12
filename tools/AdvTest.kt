@@ -33,7 +33,10 @@ fun main(args: Array<String>) {
     val vwl = if (args.size > 1) args[1].toFloat() else 640f
     val mode = if (args.size > 2) args[2] else "full"
     var okAll = true
+    // WORLD=9 (variable de entorno): probar solo ese mundo (para aislar un fallo rápido)
+    val onlyW = System.getenv("WORLD")?.toIntOrNull()
     for (w in 0 until AdvCfg.WORLDS) {
+        if (onlyW != null && w != onlyW) continue
         val a0 = Adv(w, vwl, god)
         val st = structure(a0)
         if (!st.contains("alcanzable=true") || !st.contains("todas=true")) okAll = false

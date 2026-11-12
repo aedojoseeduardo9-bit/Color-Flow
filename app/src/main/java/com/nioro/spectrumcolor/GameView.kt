@@ -384,9 +384,30 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     private var shake = 0f
     private val parts = ArrayList<Part>()
     private val trail = ArrayList<FloatArray>()
+
+    // ---- sensación de juego (solo dibujo: la física del motor no cambia) ----
+    private var hitStop = 0f       // micro-pausa al morir: todo se congela un instante
+    private var jumpPop = 0f       // la bola se achata un instante al saltar y luego se estira
+    private var switchFlash = 0f   // destello blanco al cambiar de color
+    private var scorePop = 0f      // el marcador "salta" al sumar una estrella
+    private var camLead = 0f       // la vista se adelanta un poco hacia donde va la bola
+    /** Anillo que se expande (estrella, cambio de color, muerte). */
+    private class Ring(val x: Float, val y: Float, val color: Int, val maxR: Float, val width: Float, var t: Float, val dur: Float)
+    private val rings = ArrayList<Ring>()
+    /** Texto que sube y se desvanece ("+1"). */
+    private class Floater(val x: Float, var y: Float, val text: String, var life: Float, val color: Int)
+    private val floaters = ArrayList<Floater>()
+    /** Esquirla de la bola al romperse: un gajo que sale volando y gira. */
+    private class Shard(var x: Float, var y: Float, var vx: Float, var vy: Float, var rot: Float, val spin: Float,
+                        val color: Int, val r: Float, val a0: Float, val sweep: Float, var life: Float, val maxLife: Float)
+    private val shards = ArrayList<Shard>()
     private val bubbles = ArrayList<Bubble>()
     private var bgShader: Shader? = null
     private var bgShaderWorld = -1
+    // motas de polvo muy lejanas (x, y relativas 0..1, tamaño, fase): dan profundidad detrás de las burbujas
+    private val dust = FloatArray(4 * 44).also { d -> val r = Random(21); for (i in 0 until 44) { d[i * 4] = r.nextFloat(); d[i * 4 + 1] = r.nextFloat(); d[i * 4 + 2] = 1.2f + r.nextFloat() * 2.2f; d[i * 4 + 3] = r.nextFloat() * 6.28f } }
+    private var vignette: Shader? = null
+    private var vignetteH = -1f
 
     // ---- multijugador ----
     // Cada sala/partida usa una cola nueva: los mensajes tardíos de una conexión vieja nunca afectan a la nueva.
@@ -709,6 +730,8 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         lastSwCount = 0
         parts.clear()
         trail.clear()
+        rings.clear(); floaters.clear(); shards.clear()
+        hitStop = 0f; jumpPop = 0f; switchFlash = 0f; scorePop = 0f; camLead = 0f
     }
 
     private fun restartRun() {
@@ -1195,6 +1218,12 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         }
         sm.tap()
         audio.play(Sfx.TAP)
+        jumpPop = 1f
+        // soplo de aire bajo la bola
+        for (i in 0 until 4) {
+            val dx = (i - 1.5f) * 15f
+            parts.add(Part(sm.bx + dx, sm.by + Cfg.BALL_R * 0.75f, dx * 9f, 240f + rnd.nextFloat() * 120f, Gl.white(200), 5f + rnd.nextFloat() * 3f, 0.26f, 0.26f))
+        }
     }
 
     // ======================================================================
@@ -1249,8 +1278,12 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
                 }
             }
         }
-        updateParts(dt)
-        if (shake > 0f) shake = max(0f, shake - dt * 70f)
+        if (hitStop > 0f) {
+            hitStop -= dt
+        } else {
+            updateParts(dt)
+            if (shake > 0f) shake = max(0f, shake - dt * 70f)
+        }
         if (scr == Scr.MP_JOIN) {
             val now = System.currentTimeMillis()
             val it = rooms.values.iterator()
@@ -1279,6 +1312,10 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         if (ov == Ov.PAUSE) return
         if (film == null) stepSim(sm, dt)
         afterStep(sm)
+        if (!sm.dead && !sm.finished) {
+            val target = if (sm.started) (-sm.bvy * 0.022f).coerceIn(-34f, 26f) else 0f
+            camLead += (target - camLead) * (1f - exp(-7f * dt))
+        }
         if (sm.dead || sm.finished) {
             endTimer += dt
             if (ov == Ov.NONE && endTimer > (if (sm.dead) 0.8f else 1.0f)) {
@@ -1292,15 +1329,25 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val cr = course ?: return
         val pal = Worlds.colors[world]
         if (sm.starCount > lastStarCount) {
-            for (i in lastStarCount until min(sm.starCount, cr.obs.size)) sparkle(sm.bx, cr.obs[i].y, Color.WHITE, 14)
+            for (i in lastStarCount until min(sm.starCount, cr.obs.size)) {
+                val o = cr.obs[i]
+                sparkle(sm.bx, o.y, Color.WHITE, 14)
+                // onda que recorre el obstáculo recién superado y "+1" que sube junto a la bola
+                rings.add(Ring(Cfg.W / 2f, o.y, Color.WHITE, max(150f, min(430f, o.size * 1.05f)), 12f, 0f, 0.5f))
+                floaters.add(Floater(sm.bx, sm.by - 70f, "+1", 0.7f, Color.WHITE))
+            }
+            scorePop = 1f
             lastStarCount = sm.starCount
             audio.play(Sfx.STAR)
             haptic(HapticFeedbackConstants.VIRTUAL_KEY)
         }
         if (sm.swCount > lastSwCount) {
             for (i in lastSwCount until min(sm.swCount, cr.sws.size)) {
-                sparkle(Cfg.W / 2f, cr.sws[i].y, pal[cr.sws[i].toColor % 4], 18)
+                val nc = pal[cr.sws[i].toColor % 4]
+                sparkle(Cfg.W / 2f, cr.sws[i].y, nc, 18)
+                rings.add(Ring(sm.bx, sm.by, nc, 230f, 16f, 0f, 0.45f))
             }
+            switchFlash = 1f
             lastSwCount = sm.swCount
             audio.play(Sfx.SWITCH)
         }
@@ -1319,7 +1366,20 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         audio.play(Sfx.DIE)
         haptic(HapticFeedbackConstants.LONG_PRESS)
         shake = 18f
-        for (i in 0 until 34) {
+        hitStop = 0.09f
+        val bc = pal[sm.color % 4]
+        rings.add(Ring(sm.bx, sm.by, bc, 360f, 18f, 0f, 0.6f))
+        rings.add(Ring(sm.bx, sm.by, Color.WHITE, 200f, 8f, 0f, 0.35f))
+        // la bola se parte en 8 gajos que salen volando
+        for (i in 0 until 8) {
+            val a0 = i * 45f + rnd.nextFloat() * 10f
+            val am = (a0 + 22f) * 3.14159f / 180f
+            val sp = 420f + rnd.nextFloat() * 520f
+            val life = 0.7f + rnd.nextFloat() * 0.5f
+            shards.add(Shard(sm.bx, sm.by, cos(am) * sp, sin(am) * sp - 350f, 0f, (rnd.nextFloat() - 0.5f) * 900f,
+                bc, Cfg.BALL_R, a0, 46f, life, life))
+        }
+        for (i in 0 until 22) {
             val a = rnd.nextFloat() * 6.2832f
             val sp = 250f + rnd.nextFloat() * 900f
             val life = 0.8f + rnd.nextFloat() * 0.7f
@@ -1380,6 +1440,23 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             trail[k][2] += dt
             if (trail[k][2] > Trails.MAX_LIFE) trail.removeAt(k)
             k--
+        }
+        jumpPop = max(0f, jumpPop - dt / 0.16f)
+        switchFlash = max(0f, switchFlash - dt / 0.28f)
+        scorePop = max(0f, scorePop - dt / 0.32f)
+        var ri = rings.size - 1
+        while (ri >= 0) { val rg = rings[ri]; rg.t += dt; if (rg.t >= rg.dur) rings.removeAt(ri); ri-- }
+        var fi = floaters.size - 1
+        while (fi >= 0) { val f = floaters[fi]; f.life -= dt; f.y -= 150f * dt; if (f.life <= 0f) floaters.removeAt(fi); fi-- }
+        var si = shards.size - 1
+        while (si >= 0) {
+            val sh = shards[si]
+            sh.life -= dt
+            if (sh.life <= 0f) { shards.removeAt(si); si--; continue }
+            sh.vy += 2600f * dt
+            sh.vx *= 1f - min(1f, dt * 1.2f)
+            sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.rot += sh.spin * dt
+            si--
         }
     }
 
@@ -1725,6 +1802,16 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             val y = (((0.2f + 0.27f * i) * vh - camY * depth) % span + span) % span - rad
             Gl.glow(c, x, y, rad, pal[i], 70)
         }
+        // polvo lejano: casi no se mueve con la cámara y titila despacio
+        for (i in 0 until 44) {
+            val dx = dust[i * 4] * Cfg.W
+            val span = vh + 20f
+            val dy = ((dust[i * 4 + 1] * vh - camY * 0.012f - time * 4f) % span + span) % span - 10f
+            val tw = 0.55f + 0.45f * sin(time * 1.3f + dust[i * 4 + 3])
+            val dp = Gl.p()
+            dp.color = Gl.white((70 * tw).toInt())
+            c.drawCircle(dx, dy, dust[i * 4 + 2], dp)
+        }
         val hw = th == Themes.HALLOWEEN
         val cats = th == Themes.CATS
         val dogs = th == Themes.DOGS
@@ -1767,6 +1854,14 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             c.drawCircle(x, y, s, q)
             Gl.arc(c, x, y, s * 0.72f, 205f, 50f, 2.4f, Gl.white(90))
         }
+        // viñeta suave: oscurece apenas las esquinas y centra la mirada
+        if (vignette == null || vignetteH != vh) {
+            vignette = android.graphics.RadialGradient(Cfg.W / 2f, vh / 2f, vh * 0.78f, intArrayOf(0, 0, Gl.alpha(Color.BLACK, 95)), floatArrayOf(0f, 0.62f, 1f), Shader.TileMode.CLAMP)
+            vignetteH = vh
+        }
+        val vp = Gl.p()
+        vp.shader = vignette
+        c.drawRect(0f, 0f, Cfg.W, vh, vp)
     }
 
     // ---- elementos de interfaz ----
@@ -2992,9 +3087,12 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         c.save()
         val sx = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
         val sy = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
-        c.translate(sx, -camY + sy)
+        c.translate(sx, -camY + sy + camLead)
 
-        if (cr.isLevel && !(ov == Ov.WIN && sm.finished)) drawFinish(c, cr.finishY, pal)
+        if (cr.isLevel && !(ov == Ov.WIN && sm.finished)) {
+            val near = (1f - (sm.by - cr.finishY) / 1100f).coerceIn(0f, 1f)
+            drawFinish(c, cr.finishY, pal, near)
+        }
         for (i in sm.swCount until cr.sws.size) {
             val s = cr.sws[i]
             if (s.y < camY - 100f) break
@@ -3015,8 +3113,14 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
             if (o.y < camY - 60f || o.y > camY + vh + 60f) continue
             drawStar(c, Cfg.W / 2f, o.y)
         }
+        drawRings(c)
         drawTrail(c, pal[sm.color % 4])
         if (!sm.dead) drawBall(c, sm, pal[sm.color % 4])
+        drawShards(c)
+        for (f in floaters) {
+            val a = (255 * (f.life / 0.7f).coerceIn(0f, 1f)).toInt()
+            Gl.text(c, f.text, f.x, f.y, 46f, Gl.medium, Gl.alpha(f.color, a), 0f, null, 0, Paint.Align.CENTER, false)
+        }
         if (!sm.dead && !sm.finished && sm.started && cr.inZone(sm.by)) {
             // flechas junto a la bola: aquí se puede deslizar
             val a = (110 + 90 * sin(time * 5f)).toInt()
@@ -3032,16 +3136,18 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
     }
 
     /** Meta: portal de vidrio con dos pilares de luz, cortina que brilla y baldosas de colores. */
-    private fun drawFinish(c: Canvas, y: Float, pal: IntArray) {
+    /** `near` (0..1): cuánto se acerca la bola; el portal se enciende y sus rayos se aceleran. */
+    private fun drawFinish(c: Canvas, y: Float, pal: IntArray, near: Float = 0f) {
         // cortina de luz entre los pilares
         var pp = Gl.p()
-        pp.shader = LinearGradient(0f, y - 260f, 0f, y + 30f, intArrayOf(Gl.alpha(pal[0], 0), Gl.alpha(pal[1], 60), Gl.alpha(pal[2], 25)), floatArrayOf(0f, 0.75f, 1f), Shader.TileMode.CLAMP)
+        pp.shader = LinearGradient(0f, y - 260f, 0f, y + 30f, intArrayOf(Gl.alpha(pal[0], 0), Gl.alpha(pal[1], (60 + 80 * near).toInt()), Gl.alpha(pal[2], (25 + 40 * near).toInt())), floatArrayOf(0f, 0.75f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(110f, y - 260f, 970f, y + 22f, pp)
+        if (near > 0f) Gl.glow(c, 540f, y - 120f, 420f, pal[1], (90 * near).toInt())
         // rayos que suben por la cortina
         for (k in 0 until 7) {
-            val u = ((time * 0.35f + k / 7f) % 1f)
+            val u = ((time * (0.35f + 0.9f * near) + k / 7f) % 1f)
             val x = 150f + k * 130f
-            Gl.line(c, x, y - u * 240f, x, y - u * 240f - 50f, 4f, Gl.white((120 * (1f - u)).toInt()))
+            Gl.line(c, x, y - u * 240f, x, y - u * 240f - 50f, 4f + 2f * near, Gl.white(((120 + 100 * near) * (1f - u)).toInt()))
         }
         // pilares de vidrio
         for (px in floatArrayOf(110f, 970f)) {
@@ -3794,7 +3900,56 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val r = Cfg.BALL_R
         val x = sm.bx
         val y = if (sm.started) sm.by else sm.by + sin(time * 3f) * 9f
+        // estirada en la dirección en que va (más rápido, más alargada) y achatada un instante al saltar
+        val k = if (sm.started) (abs(sm.bvy) / 1700f).coerceIn(0f, 1f) else 0f
+        var sy = 1f + 0.16f * k
+        var sx = 1f / sy
+        if (jumpPop > 0f) { val p = jumpPop * jumpPop; sx *= 1f + 0.26f * p; sy *= 1f - 0.22f * p }
+        c.save()
+        c.scale(sx, sy, x, y)
         drawBallAt(c, x, y, r, col, effSkin(), time, true)
+        if (switchFlash > 0f) {
+            val pp = Gl.p()
+            pp.color = Gl.white((210 * switchFlash * switchFlash).toInt())
+            c.drawCircle(x, y, r, pp)
+        }
+        c.restore()
+    }
+
+    private fun drawRings(c: Canvas) {
+        for (rg in rings) {
+            val u = (rg.t / rg.dur).coerceIn(0f, 1f)
+            val e = 1f - (1f - u) * (1f - u) * (1f - u)
+            val rr = 22f + (rg.maxR - 22f) * e
+            val pp = Gl.p()
+            pp.style = Paint.Style.STROKE
+            pp.strokeWidth = rg.width * (1f - 0.75f * u)
+            pp.color = Gl.alpha(rg.color, (230 * (1f - u)).toInt())
+            c.drawCircle(rg.x, rg.y, rr, pp)
+        }
+    }
+
+    private fun drawShards(c: Canvas) {
+        for (sh in shards) {
+            val a = (sh.life / sh.maxLife).coerceIn(0f, 1f)
+            val rr = sh.r * (0.6f + 0.4f * a)
+            c.save()
+            c.rotate(sh.rot, sh.x, sh.y)
+            Gl.rect.set(sh.x - rr, sh.y - rr, sh.x + rr, sh.y + rr)
+            Gl.path.reset()
+            Gl.path.moveTo(sh.x, sh.y)
+            Gl.path.arcTo(Gl.rect, sh.a0, sh.sweep)
+            Gl.path.close()
+            var pp = Gl.p()
+            pp.color = Gl.alpha(sh.color, (240 * a).toInt())
+            c.drawPath(Gl.path, pp)
+            pp = Gl.p()
+            pp.style = Paint.Style.STROKE
+            pp.strokeWidth = 2f
+            pp.color = Gl.white((170 * a).toInt())
+            c.drawPath(Gl.path, pp)
+            c.restore()
+        }
     }
 
     private fun starPath(x: Float, y: Float, ro: Float, ri: Float) {
@@ -6279,7 +6434,11 @@ class GameView(context: Context, private val api: HostApi) : View(context), Chor
         val label = score.toString()
         val pw = max(230f, Gl.textWidth(label, 84f, Gl.medium) + 130f)
         Gl.panel(c, 540f - pw / 2f, cy - 70f, 540f + pw / 2f, cy + 70f, 70f, 1f, pal[0])
+        c.save()
+        val spop = 1f + 0.22f * scorePop * scorePop
+        c.scale(spop, spop, 540f, cy)
         Gl.text(c, label, 540f, cy + 29f, 84f, Gl.medium, Gl.white(245), 0f, null, pal[0])
+        c.restore()
 
         when (mode) {
             Mode.LEVEL -> {

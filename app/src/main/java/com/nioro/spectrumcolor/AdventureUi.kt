@@ -40,6 +40,8 @@ class AdvUi(
     private var vw = 760f
     private var flash = 0f
     private var squash = 0f
+    private var jumpStretch = 0f   // estirón hacia arriba al despegar
+    private var hitStopA = 0f      // micro-pausa al golpear o recibir daño
     private var lastPx = 0f
     private var runPhase = 0f
     private var dustT = 0f
@@ -210,6 +212,7 @@ class AdvUi(
         phT += dt
         flash = max(0f, flash - dt * 2.5f)
         squash = max(0f, squash - dt * 5f)
+        jumpStretch = max(0f, jumpStretch - dt * 5f)
         bannerT = max(0f, bannerT - dt)
         bannerAge += dt
         bossSquash = max(0f, bossSquash - dt * 4f)
@@ -217,7 +220,7 @@ class AdvUi(
         zoom = max(0f, zoom - dt * 1.2f)
         if (phase == 1 || phase == 3) {
             if (phase == 3) { inp.left = false; inp.right = false; inp.jumpHeld = false }
-            a.step(dt, inp)
+            if (hitStopA > 0f) hitStopA -= dt else a.step(dt, inp)
             handleEvents(a)
             animate(a, dt)
             if (a.won && phase == 1) { phase = 3; phT = 0f }
@@ -294,20 +297,20 @@ class AdvUi(
         for (e in a.events) {
             if (!a.god && !a.won && !mkTesting && a.maker == null && (e.t == Adv.EV_CHECK || e.t == Adv.EV_UNLOCK || (e.t == Adv.EV_PICK && (e.n == Adv.IT_KEY || e.n == Adv.IT_HPUP || e.n == Adv.IT_BOOTS || e.n == Adv.IT_WHIP)))) prefs?.setAdvSave(world, a.saveState())
             when (e.t) {
-                Adv.EV_JUMP -> { burst(e.x, e.y, Gl.white(200), 5, 45f, 60f); sfx(Sfx.TAP) }
+                Adv.EV_JUMP -> { burst(e.x, e.y, Gl.white(200), 5, 45f, 60f); sfx(Sfx.TAP); jumpStretch = 1f }
                 Adv.EV_JUMP2 -> { for (k in 0 until 10) { val an = k * 0.628f; parts.add(Pt(e.x, e.y, cos(an) * 80f, sin(an) * 30f, 0xFF80E0FF.toInt(), 2f, 0.4f, 1f, 0f)) }; sfx(Sfx.SWITCH) }
                 Adv.EV_LAND -> { squash = 1f; burst(e.x, e.y - 1f, Gl.white(170), 5, 50f, 40f) }
                 Adv.EV_SWING -> sfx(Sfx.SWITCH)
                 Adv.EV_HIT -> { burst(e.x, e.y, pal[1], 7, 120f); sfx(Sfx.TAP); if (e.n > 0) nums.add(Num(e.x, e.y - 12f, e.n.toString(), 0.7f, Color.WHITE)) }
                 Adv.EV_BLOCK -> { burst(e.x, e.y, 0xFFE0E8FF.toInt(), 8, 140f, 0f); sfx(Sfx.TAP); nums.add(Num(e.x, e.y - 8f, "¡Bloqueado!", 0.7f, 0xFFB0C0FF.toInt())) }
-                Adv.EV_HURT -> { burst(e.x, e.y, 0xFFFF5060.toInt(), 14, 160f); flash = 1f; sfx(Sfx.DIE); if (e.n > 0) nums.add(Num(e.x, e.y - 14f, "-${e.n}", 0.9f, 0xFFFF6070.toInt())) }
+                Adv.EV_HURT -> { burst(e.x, e.y, 0xFFFF5060.toInt(), 14, 160f); flash = 1f; hitStopA = max(hitStopA, 0.08f); sfx(Sfx.DIE); if (e.n > 0) nums.add(Num(e.x, e.y - 14f, "-${e.n}", 0.9f, 0xFFFF6070.toInt())) }
                 Adv.EV_PICK -> { burst(e.x, e.y, 0xFFFFE070.toInt(), 9, 100f); sfx(Sfx.STAR); pickText(e.n) }
                 Adv.EV_CANDLE -> { burst(e.x, e.y, 0xFFFFB040.toInt(), 14, 120f); sfx(Sfx.TAP) }
                 Adv.EV_SPECIAL -> sfx(Sfx.SWITCH)
                 Adv.EV_BOLT -> { flash = max(flash, 0.5f); sfx(Sfx.WIN) }
                 Adv.EV_BOSSHIT -> { burst(e.x, e.y, Color.WHITE, 9, 140f); sfx(Sfx.TAP); if (e.n > 0) nums.add(Num(e.x, e.y - 20f, e.n.toString(), 0.7f, 0xFFFFE070.toInt())) }
                 Adv.EV_BOSSDIE -> { for (k in 0 until 5) burst(e.x, e.y, pal[k % 4], 24, 240f); flash = 1f; zoom = 1f; sfx(Sfx.WIN) }
-                Adv.EV_EDIE -> { burst(e.x, e.y, pal[2], 12, 130f); corpses.add(Corpse(e.x, e.y, pal[2], 0f)) }
+                Adv.EV_EDIE -> { burst(e.x, e.y, pal[2], 12, 130f); corpses.add(Corpse(e.x, e.y, pal[2], 0f)); hitStopA = max(hitStopA, 0.05f) }
                 Adv.EV_CHECK -> { burst(e.x, e.y - 30f, 0xFFFF6070.toInt(), 16, 100f, 0f); sfx(Sfx.STAR); say("Progreso guardado", 1.6f) }
                 Adv.EV_UNLOCK -> { burst(e.x, e.y, 0xFFFFD060.toInt(), 18, 130f); sfx(Sfx.WIN); say("Puerta abierta", 1.6f) }
                 Adv.EV_LOCKED -> { sfx(Sfx.TAP); say("Necesitas una llave", 1.4f) }
@@ -1568,7 +1571,7 @@ class AdvUi(
         val atkU = if (a.atkT > 0f) (0.34f - a.atkT) / 0.34f else -1f
         if (!blink) {
             var sy = 1f
-            if (!a.onGround) sy = 1f + min(0.22f, abs(a.pvy) / 2400f)
+            if (!a.onGround) sy = 1f + min(0.22f, abs(a.pvy) / 2400f) + 0.16f * jumpStretch * jumpStretch
             else if (squash > 0f) sy = 1f - 0.24f * squash
             else if (abs(a.pvx) > 60f) sy = 1f + 0.04f * sin(runPhase * 3f)
             val sx = 1f / sy
