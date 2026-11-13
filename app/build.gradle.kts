@@ -53,12 +53,14 @@ android {
     productFlavors {
         create("normal") {
             dimension = "modo"
+            proguardFiles("proguard-github.pro")
             buildConfigField("boolean", "DEV", "false")
             buildConfigField("boolean", "STORE", "false")
             signingConfig = signingConfigs.getByName("release")
         }
         create("dev") {
             dimension = "modo"
+            proguardFiles("proguard-github.pro")
             buildConfigField("boolean", "DEV", "true")
             buildConfigField("boolean", "STORE", "false")
             signingConfig = signingConfigs.getByName("release")
@@ -76,7 +78,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: achica y optimiza el juego; en Google Play el .aab incluye el archivo de desofuscación
+            // (así Play Console no avisa "No hay un archivo de desofuscación asociado con este App Bundle")
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 

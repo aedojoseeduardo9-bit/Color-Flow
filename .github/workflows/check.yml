@@ -44,6 +44,13 @@ jobs:
           }
           mkdir -p dist
           cp app/build/outputs/apk/dev/release/app-dev-release.apk dist/ColorFlowDev.apk
+          # el paquete de Google Play debe llevar el archivo de desofuscación (si no, Play Console avisa)
+          if unzip -l app/build/outputs/bundle/playRelease/app-play-release.aab | grep -q "proguard.map"; then
+            echo "Paquete de Play con archivo de desofuscación: OK"
+          else
+            echo "::error::El paquete de Play no trae el archivo de desofuscación (proguard.map)"; exit 1
+          fi
+          ls -l app/build/outputs/apk/dev/release/app-dev-release.apk app/build/outputs/bundle/playRelease/app-play-release.aab
 
       - name: Instalar kotlinc (pruebas en la JVM)
         run: |
